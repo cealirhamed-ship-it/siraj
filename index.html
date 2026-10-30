@@ -334,7 +334,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <button class="btn" id="bClear">مسح المحادثة</button>
     <button class="btn" id="bCard" type="button">عرض بطاقة تجريبية</button>
   </div>
-  <div class="ver">الإصدار 3.8</div>
+  <div class="ver">الإصدار 3.9</div>
   <div class="keys">
     <kbd>Space</kbd> تحدّث أو قاطع &nbsp; <kbd>F</kbd> ملء الشاشة &nbsp; <kbd>C</kbd> النص &nbsp; <kbd>Esc</kbd> إغلاق
   </div>
@@ -372,12 +372,12 @@ const cfg={
   gvoice:store.get("gvoice","Charon"),
   gttsModel:store.get("gttsModel","gemini-3.8-flash-tts"),
   ekey:store.get("ekey",""),
-  evoice:store.get("evoice","nPczCjzI2devNBz1zQrb"),
+  evoice:(()=>{if(store.get("evoiceAR","")!=="1"){store.set("evoiceAR","1");if(!store.get("ecustom",""))store.set("evoice","MI88rOZjXbH22N8KHXUo")}return store.get("evoice","MI88rOZjXbH22N8KHXUo")})(),
   ecustom:store.get("ecustom",""),
   emodel:(()=>{if(store.get("emodelV4","")!=="1"){store.set("emodelV4","1");store.set("emodel","eleven_v4")}return store.get("emodel","eleven_v4")})()
 };
 const GVOICES=[["Charon","Charon — رجل رصين وواضح"],["Algieba","Algieba — رجل ناعم وشجي"],["Iapetus","Iapetus — رجل واضح النطق"],["Enceladus","Enceladus — رجل دافئ هامس"],["Algenib","Algenib — رجل عميق خشن"],["Orus","Orus — رجل حازم"],["Alnilam","Alnilam — رجل ثابت"],["Schedar","Schedar — رجل متزن"],["Sadaltager","Sadaltager — رجل خبير"],["Rasalgethi","Rasalgethi — رجل إذاعي"],["Umbriel","Umbriel — رجل مريح"],["Achird","Achird — رجل ودود"],["Puck","Puck — رجل حيوي"],["Fenrir","Fenrir — رجل متحمس"]];
-const EVOICES=[["nPczCjzI2devNBz1zQrb","Brian — عميق ورخيم"],["JBFqnCBsd6RMkjVDRZzb","George — دافئ وراوٍ"],["onwK4e9ZLuTAKqWW03F9","Daniel — رسمي وعميق"],["pNInz6obpgDQGcFmaJgB","Adam — واضح ومتزن"],["pqHfZKP75CvOlQylNhV4","Bill — ناضج وهادئ"],["cjVigY5qzO86Huf0OWal","Eric — ناعم وودود"],["iP95p4xoKVk53GoZ742B","Chris — طبيعي وعفوي"],["TX3LPaxmHKxFdv7VOQHJ","Liam — شاب وواضح"]];
+const EVOICES=[["MI88rOZjXbH22N8KHXUo","Ali — عربي خليجي عميق وهادئ (الأقرب للعراقي)"],["XdoLPWNt7ytn6BtU4FBf","Abdullah — عربي جهوري درامي"],["QRq5hPRAKf5ZhSlTBH6r","Yahya — عربي دافئ معبّر"],["G1HOkzin3NMwRHSq60UI","Arabic Knight — عربي عميق محايد"],["rPNcQ53R703tTmtue1AT","Mazen — عربي عميق احترافي"],["yXEnnEln9armDCyhkXcA","Jeddawi — خليجي شاب واثق"],["nPczCjzI2devNBz1zQrb","Brian — عميق ورخيم"],["JBFqnCBsd6RMkjVDRZzb","George — دافئ وراوٍ"],["onwK4e9ZLuTAKqWW03F9","Daniel — رسمي وعميق"],["pNInz6obpgDQGcFmaJgB","Adam — واضح ومتزن"],["pqHfZKP75CvOlQylNhV4","Bill — ناضج وهادئ"],["cjVigY5qzO86Huf0OWal","Eric — ناعم وودود"],["iP95p4xoKVk53GoZ742B","Chris — طبيعي وعفوي"],["TX3LPaxmHKxFdv7VOQHJ","Liam — شاب وواضح"]];
 function fillSel(id,list,val){const s=$(id);s.innerHTML="";list.forEach(([v,l])=>{const o=document.createElement("option");o.value=v;o.textContent=l;s.appendChild(o)});s.value=val;if(!s.value)s.value=list[0][0]}
 function showEngine(e){$("engine").value=e;$("gGemini").hidden=e!=="gemini";$("gEleven").hidden=e!=="eleven";$("gBrowser").hidden=e!=="browser";$("gKeyFld").hidden=panelProv==="gemini"}
 $("engine").onchange=()=>showEngine($("engine").value);
