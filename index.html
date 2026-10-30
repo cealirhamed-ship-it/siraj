@@ -126,6 +126,31 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
 .card li::before{content:"";position:absolute;right:2px;top:.72em;width:5px;height:5px;background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
 .card .num{margin-top:6px;font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:36px;line-height:1.1;color:#f2fbff;direction:ltr;text-align:right;font-variant-numeric:tabular-nums;text-shadow:0 0 18px rgba(111,214,255,.55)}
 .card .cap{margin-top:6px;font-size:13.5px;line-height:1.6;color:var(--ink-dim)}
+/* music player */
+#music{position:fixed;z-index:7;width:var(--mw,340px);left:max(24px,env(safe-area-inset-left,0px));top:17vh;
+  background:linear-gradient(155deg,rgba(12,28,46,.86),rgba(4,10,19,.82));border:1px solid rgba(111,214,255,.28);border-radius:3px;padding:12px 14px 14px;
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:0 12px 40px rgba(0,20,50,.5);color:var(--ink)}
+#music.bottom{top:auto;max-width:520px;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));width:auto;bottom:calc(118px + env(safe-area-inset-bottom,0px))}
+#music::before,#music::after{content:"";position:absolute;width:12px;height:12px;border:1.5px solid var(--amber)}
+#music::before{top:-1px;right:-1px;border-left:0;border-bottom:0}
+#music::after{bottom:-1px;left:-1px;border-right:0;border-top:0}
+#music .k{display:flex;justify-content:space-between;align-items:center;direction:ltr;font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:9.5px;letter-spacing:.2em;color:var(--amber)}
+#music .eq{display:flex;gap:2px;align-items:flex-end;height:12px}
+#music .eq b{width:3px;background:var(--amber);border-radius:1px;animation:eqb .9s ease-in-out infinite}
+#music .eq b:nth-child(2){animation-delay:-.3s}#music .eq b:nth-child(3){animation-delay:-.6s}#music .eq b:nth-child(4){animation-delay:-.15s}
+@keyframes eqb{0%,100%{height:3px}50%{height:12px}}
+#music .mt{margin:7px 0 9px;font-family:var(--f-display);font-size:16px;line-height:1.45;text-wrap:balance}
+#music .vid{position:relative;width:100%;aspect-ratio:16/9;min-height:200px;background:#000;border:1px solid rgba(111,214,255,.18);overflow:hidden}
+#music .vid iframe,#music .vid>div{position:absolute;inset:0;width:100%;height:100%;border:0}
+#mTap{position:absolute;inset:auto 0 0 0;margin:auto;width:auto;padding:8px 12px;background:rgba(0,0,0,.65);color:var(--ink);border:0;font:inherit;font-size:13px}
+#music .mrow{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+#music .mrow .ib{width:36px;height:36px;font-size:14px;color:var(--ink)}
+#music.bottom{display:grid;grid-template-columns:200px minmax(0,1fr);column-gap:12px;align-items:start;padding:10px}
+#music.bottom .vid{grid-column:1;grid-row:1/4;width:200px;height:200px;aspect-ratio:auto}
+#music.bottom .k,#music.bottom .mt,#music.bottom .mrow{grid-column:2}
+#music.bottom .mt{font-size:14px;margin:6px 0}
+#music.in{animation:cardIn .7s cubic-bezier(.2,.8,.2,1) both}
+#music.out{animation:cardOut .5s ease-in both}
 .card.in{animation:cardIn .75s cubic-bezier(.2,.8,.2,1) both}
 .card.in .scan{animation:scan 1s .12s ease-out both}
 .card.in li,.card.in .num,.card.in .cap{animation:lineIn .45s both}
@@ -161,6 +186,16 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
 </div>
 
 <div id="cards" class="side" aria-live="polite"></div>
+<div id="music" hidden>
+  <div class="k"><span>NOW PLAYING</span><span class="eq"><b></b><b></b><b></b><b></b></span></div>
+  <div class="mt" id="mTitle"></div>
+  <div class="vid"><div id="ytp"></div><button id="mTap" type="button" hidden>المس الفيديو لبدء التشغيل</button></div>
+  <div class="mrow">
+    <button class="ib" id="mPlay" type="button" aria-label="إيقاف مؤقت أو تشغيل">❚❚</button>
+    <button class="ib" id="mStop" type="button" aria-label="إيقاف">■</button>
+    <a class="btn" id="mOpen" target="_blank" rel="noopener" hidden>افتح في يوتيوب</a>
+  </div>
+</div>
 <div id="hud">
   <div id="you"></div>
   <div id="say"></div>
@@ -334,7 +369,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <button class="btn" id="bClear">مسح المحادثة</button>
     <button class="btn" id="bCard" type="button">عرض بطاقة تجريبية</button>
   </div>
-  <div class="ver">الإصدار 4.0</div>
+  <div class="ver">الإصدار 4.2</div>
   <div class="keys">
     <kbd>Space</kbd> تحدّث أو قاطع &nbsp; <kbd>F</kbd> ملء الشاشة &nbsp; <kbd>C</kbd> النص &nbsp; <kbd>Esc</kbd> إغلاق
   </div>
@@ -449,7 +484,7 @@ if(synth){loadVoices();synth.onvoiceschanged=loadVoices}
 
 /* ---------- state & UI ---------- */
 let state="sleep";
-const STATUS={sleep:"في انتظارك",idle:"اضغط أو قل شيئاً",listening:"يستمع إليك…",thinking:"يفكّر…",speaking:"يتحدث…"};
+const STATUS={sleep:"في انتظارك",idle:"اضغط أو قل شيئاً",listening:"يستمع إليك…",thinking:"يفكّر…",speaking:"يتحدث…",music:"يشغّل موسيقى ♪  المس الشخصية للإيقاف"};
 function setState(s){state=s;document.body.dataset.state=s;lastActive=performance.now();
   $("statusText").textContent=(s==="listening"&&typeof waitingForName==="function"&&waitingForName())?`قل «يا ${cfg.name}»…`:(STATUS[s]||"")}
 let sayFade=0;
@@ -519,6 +554,7 @@ if(SR){
 function startRec(){if(!rec)return;rec.lang=cfg.recLang;gotFinal=false;if(recRunning)return;try{rec.start()}catch(_){}}
 function stopRec(){if(rec&&recRunning){try{rec.abort()}catch(_){}}}
 function listen(){
+  if(music.on)return;
   setSession("auto");
   if(!rec){setState("idle");return}
   stopSpeaking();setState("listening");setYou("");startRec();
@@ -771,6 +807,7 @@ function stopSpeaking(){
 }
 let cardHideT=0;
 function finishTurn(){
+  if(pendingSong&&(state==="speaking"||state==="thinking")){const sg=pendingSong;pendingSong=null;fadeSay(4000);setTimeout(()=>playSong(sg.title,sg.ids),300);return}
   clearTimeout(cardHideT);if($("cards").children.length)cardHideT=setTimeout(hideCards,3500);
   followUntil=Date.now()+10000;
   if(state==="speaking"||state==="thinking"){fadeSay(6000);if(started)setTimeout(()=>{if(!speaking&&streamDone)listen()},450);else setState("idle")}
@@ -822,6 +859,9 @@ ${STYLES[cfg.style]||STYLES.fusha}
 - إذا لم تفهم الكلام لأن التعرف على الصوت أخطأ، اطلب من المستخدم الإعادة بلطف.${cfg.live?`
 - إذا احتاج السؤال معلومات حديثة كالأخبار أو الطقس أو الأسعار أو النتائج، ابحث عنها ثم أجب باختصار، دون قراءة الروابط أو أسماء المواقع الطويلة.`:""}
 - إذا أخبرك المستخدم بمعلومة دائمة ومفيدة عن نفسه، كاسمه أو عمله أو مدينته أو ما يحبه أو أشخاص مهمين له، أو طلب منك أن تتذكر شيئاً، فأضف في آخر ردك سطراً بهذا الشكل بالضبط: [[تذكر: المعلومة باختصار]]. وإذا طلب أن تنسى شيئاً فأضف: [[انس: المعلومة]]. هذه الأسطر لا تُقرأ للمستخدم، فلا تذكرها في كلامك.
+- إذا طلب المستخدم تشغيل أغنية أو موسيقى أو نشيد أو تلاوة أو أي مقطع صوتي: ابحث عنه في يوتيوب، وقل جملة قصيرة واحدة فقط مثل «تدلل، هسّه أشغّلك ...»، ثم أضف في آخر ردك سطراً واحداً بهذا الشكل بالضبط:
+  [[أغنية: اسم الأغنية - اسم الفنان | معرف1, معرف2, معرف3]]
+  المعرفات هي معرفات فيديوهات يوتيوب المكونة من 11 حرفاً (الجزء بعد v= في الرابط) من نتائج البحث، الأنسب أولاً. إذا لم تجد معرفات مؤكدة اكتب الاسم فقط: [[أغنية: اسم الأغنية - اسم الفنان]]. لا تخترع معرفات، ولا تضع بطاقات مع طلب الأغاني.
 - مهم جداً: أنت تظهر على شاشة، وبجانبك لوحة بطاقات. في كل جواب فيه معلومة مفيدة، كشرح أو خطوات أو نقاط أو أرقام أو مقارنة أو تعريف أو نصيحة، يجب أن تضيف في آخر ردك بطاقة واحدة على الأقل، وحتى أربع بطاقات. البطاقات تُعرض ولا تُقرأ. الصيغ بالضبط:
   [[بطاقة: عنوان قصير | نقطة أولى ; نقطة ثانية ; نقطة ثالثة]]
   [[رقم: القيمة مع وحدتها | وصف قصير لها]]
@@ -831,6 +871,11 @@ ${STYLES[cfg.style]||STYLES.fusha}
   النقاط قصيرة من كلمتين إلى ثماني كلمات، وافصل بينها بالفاصلة المنقوطة. لا تقرأ محتوى البطاقات حرفياً في كلامك. لا تضع بطاقات فقط في التحية أو الرد بكلمة أو كلمتين.
 تاريخ اليوم: ${d}، والساعة الآن ${tm}.${mem}`;
 }
+const SONG_RE=/\[\[\s*(أغنية|اغنية|أغنيه|song|music)\s*[:：]\s*([^\]]+?)\s*\]\]/i;
+let pendingSong=null;
+function parseSong(raw){const m=raw.match(SONG_RE);if(!m)return null;const p=m[2].split("|");
+  const ids=(p[1]||"").split(/[,،\s]+/).map(x=>x.trim().replace(/.*(?:v=|youtu\.be\/)/,"").slice(0,11)).filter(x=>/^[\w-]{11}$/.test(x));
+  return {title:(p[0]||"").trim(),ids}}
 const CARD_RE=/\[\[\s*(بطاقة|بطاقه|رقم|card|data)\s*[:：]\s*([^\]]+?)\s*\]\]/gi;
 let cardSeq=0,shownCards=0;
 function cardBlip(i){if(!outCtx||cfg.cardSound===false)return;try{const ac=outCtx,t=ac.currentTime+i*.18,o=ac.createOscillator(),g=ac.createGain();o.type="sine";o.frequency.setValueAtTime(2300,t);o.frequency.exponentialRampToValueAtTime(1500,t+.06);
@@ -900,6 +945,7 @@ async function handleUser(text){
       full+=piece;feedCards(full,cardState);const v=visibleText(full);if(v.length>vis){pend+=v.slice(vis);vis=v.length}setSay(clean(v));flush(false);
     }
     flush(true);speak("",id,true);
+    const song=parseSong(full);if(song&&song.title){pendingSong=song;hideCards()}
     applyMemoryTags(full);
     const said=visibleText(full).trim();
     if(said){history.push({role:"assistant",content:said});store.set("history",JSON.stringify(history.slice(-40)))}
@@ -1121,6 +1167,56 @@ function triggerImpact(){
   }
 }
 
+/* ---------- music ---------- */
+const music={on:false,player:null,ids:[],idx:0,title:"",playing:false,t0:0,bpm:108,k:0,notes:[],lastBeat:-1};
+let ytLoading=null;
+function loadYT(){
+  if(window.YT&&YT.Player)return Promise.resolve(true);
+  if(ytLoading)return ytLoading;
+  ytLoading=new Promise(res=>{const prev=window.onYouTubeIframeAPIReady;window.onYouTubeIframeAPIReady=()=>{prev&&prev();res(true)};
+    const sc=document.createElement("script");sc.src="https://www.youtube.com/iframe_api";sc.onerror=()=>res(false);document.head.append(sc);setTimeout(()=>res(!!(window.YT&&YT.Player)),9000)});
+  return ytLoading;
+}
+async function findIds(q){
+  const hosts=["https://inv.nadeko.net","https://invidious.nerdvpn.de","https://yewtu.be","https://invidious.privacyredirect.com"];
+  for(const h of hosts){try{const c=new AbortController();const tm=setTimeout(()=>c.abort(),4500);
+    const r=await fetch(h+"/api/v1/search?type=video&q="+encodeURIComponent(q),{signal:c.signal});clearTimeout(tm);
+    if(!r.ok)continue;const j=await r.json();const ids=(Array.isArray(j)?j:[]).filter(v=>v&&v.videoId&&(!v.lengthSeconds||v.lengthSeconds<1200)).map(v=>v.videoId).slice(0,4);if(ids.length)return ids}catch(_){}}
+  return [];
+}
+function showMusicPanel(){const m=$("music");m.hidden=false;m.classList.remove("out");void m.offsetWidth;m.classList.add("in")}
+function openLink(){const a=$("mOpen");a.href="https://www.youtube.com/results?search_query="+encodeURIComponent(music.title);a.hidden=false}
+async function playSong(title,ids){
+  stopRec();music.on=true;music.title=title;music.ids=ids||[];music.idx=0;music.playing=false;music.t0=performance.now()/1000;music.bpm=96+Math.floor(Math.random()*30);
+  document.body.classList.add("music");setState("music");
+  $("mTitle").textContent=title;$("mOpen").hidden=true;$("mTap").hidden=true;$("mPlay").textContent="❚❚";showMusicPanel();setSay("♪ "+title);
+  if(!music.ids.length)music.ids=await findIds(title);
+  if(!music.on)return;
+  if(!music.ids.length){openLink();setSay("ما لگيت الأغنية للتشغيل هنا. اضغط «افتح في يوتيوب».");return}
+  const ok=await loadYT();if(!music.on)return;
+  if(!ok){openLink();return}
+  const id=music.ids[0];
+  if(music.player&&music.player.loadVideoById){music.player.loadVideoById(id);setTimeout(checkPlaying,2600);return}
+  music.player=new YT.Player("ytp",{width:"100%",height:"100%",videoId:id,host:"https://www.youtube-nocookie.com",
+    playerVars:{autoplay:1,playsinline:1,rel:0,modestbranding:1,origin:location.origin},
+    events:{onReady:e=>{try{e.target.setVolume(90);e.target.playVideo()}catch(_){}setTimeout(checkPlaying,2600)},
+      onStateChange:e=>{const S=YT.PlayerState;if(e.data===S.PLAYING){music.playing=true;$("mTap").hidden=true;$("mPlay").textContent="❚❚"}
+        else if(e.data===S.PAUSED){music.playing=false;$("mPlay").textContent="▶"}
+        else if(e.data===S.ENDED){stopMusic()}},
+      onError:()=>nextSong()}});
+}
+function nextSong(){music.idx++;if(music.idx<music.ids.length&&music.player){music.player.loadVideoById(music.ids[music.idx]);setTimeout(checkPlaying,2600)}else{openLink();$("mTap").hidden=true}}
+function checkPlaying(){if(music.on&&!music.playing&&$("mOpen").hidden)$("mTap").hidden=false}
+function stopMusic(){
+  if(!music.on)return;music.on=false;music.playing=false;
+  try{music.player&&music.player.stopVideo()}catch(_){}
+  const m=$("music");m.classList.remove("in");m.classList.add("out");setTimeout(()=>{if(!music.on)m.hidden=true},520);
+  document.body.classList.remove("music");setSay("");setTimeout(()=>{if(!music.on&&started)listen()},400);
+}
+$("mStop").onclick=e=>{e.stopPropagation();stopMusic()};
+$("mPlay").onclick=e=>{e.stopPropagation();if(!music.player)return;try{music.playing?music.player.pauseVideo():music.player.playVideo()}catch(_){}};
+$("mTap").onclick=e=>{e.stopPropagation();try{music.player.playVideo()}catch(_){}};
+
 /* ---------- start / interaction ---------- */
 let started=false;
 async function start(){
@@ -1154,6 +1250,7 @@ $("stage").addEventListener("click",()=>{
   ensureAudio();
   if(!started)return start();
   if(introRunning())return;
+  if(music.on){stopMusic();return}
   if(state==="speaking"||state==="thinking"){stopSpeaking();listen()}
   else if(state==="listening"){stopRec();setState("idle")}
   else listen();
@@ -1225,7 +1322,8 @@ function layoutStage(){
   }
   st.style.height=S+"px";st.style.width=S*.75+"px";
   st.style.left=(Wv-S*.75)/2+"px";st.style.top=top+"px";
-  const cb=$("cards"),free=(Wv-S*.75)/2;
+  const cb=$("cards"),free=(Wv-S*.75)/2,mp=$("music");
+  if(free>=250){mp.classList.remove("bottom");mp.style.setProperty("--mw",Math.min(340,free-40)+"px")}else mp.classList.add("bottom");
   if(free>=250){cb.className="side";cb.style.setProperty("--cw",Math.min(340,free-40)+"px");if(cb.parentNode!==document.body)document.body.insertBefore(cb,$("hud"))}
   else{cb.className="bottom";cb.style.setProperty("--cw",Math.min(320,Wv*.78)+"px");const hud=$("hud");if(cb.parentNode!==hud)hud.insertBefore(cb,hud.firstChild)}
 }
@@ -1693,6 +1791,43 @@ function drawNebula(t,K){
   g.uniform1f(NU.T,t);g.uniform1f(NU.E,E);g.uniform1f(NU.K,K);
   g.drawArrays(g.TRIANGLE_STRIP,0,4);
 }
+function noteShape(g,kind,s){
+  const head=(x,y)=>{g.beginPath();g.ellipse(x,y,s*.3,s*.21,-.4,0,6.2832);g.fill()};
+  g.lineWidth=Math.max(1.2,s*.075);g.lineCap="round";
+  if(kind===2){head(0,0);head(s*.78,-s*.16);
+    g.beginPath();g.moveTo(s*.27,-s*.05);g.lineTo(s*.27,-s*1.15);g.moveTo(s*1.05,-s*.2);g.lineTo(s*1.05,-s*1.3);g.stroke();
+    g.beginPath();g.moveTo(s*.27,-s*1.15);g.lineTo(s*1.05,-s*1.3);g.lineTo(s*1.05,-s*1.14);g.lineTo(s*.27,-s*.99);g.closePath();g.fill();return}
+  head(0,0);g.beginPath();g.moveTo(s*.27,-s*.05);g.lineTo(s*.27,-s*1.15);g.stroke();
+  if(kind===1){g.beginPath();g.moveTo(s*.27,-s*1.15);g.bezierCurveTo(s*.38,-s*.85,s*.75,-s*.8,s*.62,-s*.4);g.bezierCurveTo(s*.6,-s*.65,s*.42,-s*.78,s*.27,-s*.82);g.closePath();g.fill()}
+}
+function drawMusic(t,dt){
+  const K=music.k;if(K<.01&&!music.notes.length)return;
+  const beat=Math.floor((t-music.t0)*music.bpm/60),ph=((t-music.t0)*music.bpm/60)%1,env=music.playing?Math.exp(-ph*5):.15;
+  if(music.on&&music.playing&&beat!==music.lastBeat){music.lastBeat=beat;
+    const n=reduced?1:2+(beat%4===0?2:0);
+    for(let i=0;i<n;i++){const a=-Math.PI/2+(Math.random()-.5)*2.4,sp=40+Math.random()*70;
+      music.notes.push({x:coreX+Math.cos(a)*figW*.18,y:coreY+Math.sin(a)*figW*.14,vx:Math.cos(a)*sp*.6,vy:-30-Math.random()*50,r:(Math.random()-.5)*.6,vr:(Math.random()-.5)*1.4,
+        s:12+Math.random()*16,g:Math.floor(Math.random()*3),life:1,warm:Math.random()<.45,ph:Math.random()*6.28})}}
+  sx.save();sx.globalCompositeOperation="lighter";sx.textAlign="center";sx.textBaseline="middle";
+  for(let i=music.notes.length-1;i>=0;i--){const n=music.notes[i];
+    n.life-=dt*.28;if(n.life<=0){music.notes.splice(i,1);continue}
+    n.x+=(n.vx+Math.sin(t*2+n.ph)*18)*dt;n.y+=n.vy*dt;n.vy-=6*dt;n.r+=n.vr*dt;
+    const a=Math.min(1,n.life*1.6)*(.55+.45*env);
+    sx.save();sx.translate(n.x-mx*8,n.y-my*6);sx.rotate(n.r);
+    sx.shadowColor=n.warm?"rgba(255,190,110,.9)":"rgba(120,215,255,.9)";sx.shadowBlur=12;
+    const c=n.warm?`rgba(255,205,140,${a})`:`rgba(170,230,255,${a})`;sx.fillStyle=c;sx.strokeStyle=c;noteShape(sx,n.g,n.s);sx.restore()}
+  // equalizer ring around the head
+  if(K>.01){
+    const N=56,R=figW*.33,cx=coreX-mx*7,cy=coreY-my*6;sx.lineWidth=3;sx.lineCap="round";
+    for(let i=0;i<N;i++){const ang=i/N*6.2832-Math.PI/2;
+      const v=music.playing?(.25+.75*Math.abs(Math.sin(i*1.7+t*3.1)*Math.sin(i*.37-t*2.2)))*(.35+.65*env):.08;
+      const L=(6+v*figW*.07)*K,x0=cx+Math.cos(ang)*R,y0=cy+Math.sin(ang)*R;
+      sx.strokeStyle=i%7===0?`rgba(255,190,120,${.55*K})`:`rgba(120,210,255,${.45*K})`;
+      sx.beginPath();sx.moveTo(x0,y0);sx.lineTo(x0+Math.cos(ang)*L,y0+Math.sin(ang)*L);sx.stroke()}
+    sx.strokeStyle=`rgba(150,220,255,${.18*K*(.5+.5*env)})`;sx.lineWidth=1;sx.beginPath();sx.arc(cx,cy,R*(1+.02*env),0,6.2832);sx.stroke();
+  }
+  sx.restore();
+}
 function drawBackdrop(t,dt){
   const IT=introT0<0?(introDone?99:0):(t-introT0)*introSpeed;
   const sceneK=introDone&&introT0<0?1:Math.min(1,Math.max(0,(IT-IMPACT+.1)/1.2));
@@ -1755,7 +1890,7 @@ function frame(now){
   if(!impacted&&introT0>=0&&it>=IMPACT)triggerImpact();
   const hud=$("hudTxt");
   if(introT0>=0&&it<IMPACT){hud.style.opacity=.85;hud.textContent="ASSEMBLING... "+Math.min(100,Math.round(it/7.3*100))+"%"}
-  else if(introT0>=0||introDone){hud.style.opacity=.75;hud.textContent="STATUS: "+({sleep:"ONLINE",idle:"ONLINE",listening:"LISTENING",thinking:"THINKING",speaking:"SPEAKING"}[state]||"ONLINE")}
+  else if(introT0>=0||introDone){hud.style.opacity=.75;hud.textContent="STATUS: "+({sleep:"ONLINE",idle:"ONLINE",listening:"LISTENING",thinking:"THINKING",speaking:"SPEAKING",music:"PLAYING"}[state]||"ONLINE")}
 
   let target;
   outLevel+=(readOut()-outLevel)*.5;
@@ -1764,6 +1899,7 @@ function frame(now){
   else if(state==="speaking")target=.3+.08*Math.sin(t*5);
   else if(state==="listening")target=.18+Math.min(.7,micLevel*1.6);
   else if(state==="thinking")target=.3+.08*Math.sin(t*5);
+  else if(state==="music"){const bp=((t-music.t0)*music.bpm/60)%1;target=music.playing?.3+.45*Math.exp(-bp*5):.18}
   else target=.12+.05*Math.sin(t*1.2);
   E+=(target-E)*Math.min(1,dt*(state==="speaking"?14:6));
 
@@ -1782,7 +1918,9 @@ function frame(now){
   // head: small nods that follow the stress of the voice, slow drift while talking
   talkAmt+=((state==="speaking"&&(curSrc||browserTalking||window.__talk)?1:0)-talkAmt)*Math.min(1,dt*2);
   nodSlow+=(mouth-nodSlow)*Math.min(1,dt*3.5);
-  const nodT=(mouth-nodSlow)*1.6+talkAmt*.25*Math.sin(t*1.7);
+  music.k+=((music.on?1:0)-music.k)*Math.min(1,dt*2.5);
+  const beatPh=((t-music.t0)*music.bpm/60)%1,beatEnv=music.playing?Math.exp(-beatPh*6):0;
+  const nodT=(mouth-nodSlow)*1.6+talkAmt*.25*Math.sin(t*1.7)+music.k*(beatEnv*1.4-.35+.25*Math.sin(t*music.bpm/60*Math.PI));
   const ny0=nod.y;nod.y+=(nodT-nod.y)*Math.min(1,dt*7);
   const tilt0=nod.z;nod.z+=(talkAmt*.5*Math.sin(t*.73+1.1)-nod.z)*Math.min(1,dt*2);
   // hair trails behind the head (damped spring)
@@ -1805,6 +1943,7 @@ function frame(now){
     sx.beginPath();sx.arc(x,y,s.r,0,6.283);sx.fill();
   }
   drawBackdrop(t,dt);
+  drawMusic(t,dt);
   if(vig&&vig.width>0)sx.drawImage(vig,0,0,W,H);
   for(let i=shocks.length-1;i>=0;i--){const s=shocks[i];if(s.d>0){s.d-=dt;continue}
     s.t+=dt;const L=s.main?1.25:1.0,p=Math.min(1,s.t/L);if(p>=1){shocks.splice(i,1);continue}
