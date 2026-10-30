@@ -168,6 +168,16 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
       <option value="browser">صوت المتصفح — فوري وبدون إنترنت إضافي</option>
     </select>
   </div>
+  <div class="fld">
+    <label for="vfx">نبرة الصوت</label>
+    <select id="vfx">
+      <option value="off">طبيعية بدون معالجة</option>
+      <option value="light">فخمة خفيفة</option>
+      <option value="mid">فخمة — مساعد ذكي</option>
+      <option value="strong">آلية فخمة قوية</option>
+    </select>
+    <div class="hint">تعمل مع أصوات Gemini وElevenLabs. اضغط «جرّب الصوت» لتسمع الفرق.</div>
+  </div>
   <div class="grp" id="gGemini">
     <div class="fld">
       <label for="gvoice">صوت Gemini</label>
@@ -277,7 +287,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <button class="btn" id="bTest">جرّب الصوت</button>
     <button class="btn" id="bClear">مسح المحادثة</button>
   </div>
-  <div class="ver">الإصدار 3.0</div>
+  <div class="ver">الإصدار 3.1</div>
   <div class="keys">
     <kbd>Space</kbd> تحدّث أو قاطع &nbsp; <kbd>F</kbd> ملء الشاشة &nbsp; <kbd>C</kbd> النص &nbsp; <kbd>Esc</kbd> إغلاق
   </div>
@@ -309,6 +319,7 @@ const cfg={
   fullIntro:store.get("fullIntro","0")==="1",
   captions:store.get("captions","1")==="1",
   engine:store.get("engine","gemini"),
+  vfx:store.get("vfx","mid"),
   gvoice:store.get("gvoice","Charon"),
   gttsModel:store.get("gttsModel","gemini-3.8-flash-tts"),
   ekey:store.get("ekey",""),
@@ -349,7 +360,7 @@ $("provider").onchange=()=>{draft[panelProv].key=$("apiKey").value.trim();draft[
 let memory=[];try{memory=JSON.parse(store.get("memory","[]"))||[]}catch(_){memory=[]}
 function showMem(){$("memCount").textContent=memory.length?memory.length+" معلومة":"فارغة";$("memList").textContent=memory.map(m=>"• "+m).join("\n")}
 function fillPanel(){
-  $("style").value=cfg.style;$("live").checked=cfg.live;$("wake").checked=cfg.wake;$("barge").checked=cfg.barge;$("fullIntro").checked=cfg.fullIntro;
+  $("vfx").value=cfg.vfx;$("style").value=cfg.style;$("live").checked=cfg.live;$("wake").checked=cfg.wake;$("barge").checked=cfg.barge;$("fullIntro").checked=cfg.fullIntro;
   $("wakeHint").textContent=`لا يرد إلا إذا ناديته باسمه، مثل «يا ${cfg.name}، كم الساعة؟». بعد كل رد تستطيع المتابعة 10 ثوانٍ دون نداء.`;
   $("bargeHint").hidden=false;showMem();$("memList").hidden=true;
   draft.claude={key:cfg.key,model:cfg.model};draft.gemini={key:cfg.gkey,model:cfg.gmodel};showProvider(cfg.provider);
@@ -469,7 +480,7 @@ function clean(t){
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu,"").replace(/\s+/g," ").trim();
 }
 const cleanKey=v=>(v||"").replace(/[\s"'`]+/g,"");
-function ttsSnap(){return {engine:cfg.engine,gkey:cfg.gkey,gvoice:cfg.gvoice,gttsModel:cfg.gttsModel,ekey:cfg.ekey,evoice:cfg.ecustom||cfg.evoice,emodel:cfg.emodel,voice:cfg.voice,rate:cfg.rate,pitch:cfg.pitch}}
+function ttsSnap(){return {vfx:cfg.vfx,engine:cfg.engine,gkey:cfg.gkey,gvoice:cfg.gvoice,gttsModel:cfg.gttsModel,ekey:cfg.ekey,evoice:cfg.ecustom||cfg.evoice,emodel:cfg.emodel,voice:cfg.voice,rate:cfg.rate,pitch:cfg.pitch}}
 let snapOverride=null;
 function engineOf(snap){
   if(snap.engine==="gemini"&&snap.gkey&&Date.now()>geminiCool)return "gemini";
@@ -595,9 +606,48 @@ function speakNext(){
   item.audio.then(buf=>{if(item.id===turnId)playBuffer(buf,item)})
     .catch(err=>{if(item.id!==turnId||err.name==="AbortError")return;console.warn(err);note(err.message||"تعذّر الصوت الواقعي، استخدمت صوت المتصفح.");speakBrowser(item)});
 }
+const VFX={
+  light: {rate:1.00,low:3,pres:2,air:2,metal:.10,ring:0,  chorus:.16,wet:.12,ir:1.4},
+  mid:   {rate:.97,low:5,pres:3,air:2.5,metal:.20,ring:.06,chorus:.26,wet:.17,ir:1.8},
+  strong:{rate:.93,low:6,pres:3.5,air:3,metal:.34,ring:.14,chorus:.34,wet:.22,ir:2.2}
+};
+let vfxNodes={};
+function voiceInput(level){
+  if(!VFX[level])return outAn;
+  if(vfxNodes[level])return vfxNodes[level];
+  const ac=outCtx,P=VFX[level],inp=ac.createGain();
+  // tone: warmth, presence and air
+  const low=ac.createBiquadFilter();low.type="lowshelf";low.frequency.value=160;low.gain.value=P.low;
+  const mud=ac.createBiquadFilter();mud.type="peaking";mud.frequency.value=380;mud.Q.value=1;mud.gain.value=-2;
+  const pres=ac.createBiquadFilter();pres.type="peaking";pres.frequency.value=3200;pres.Q.value=.9;pres.gain.value=P.pres;
+  const air=ac.createBiquadFilter();air.type="highshelf";air.frequency.value=9000;air.gain.value=P.air;
+  const sum=ac.createGain();
+  inp.connect(low);low.connect(mud);mud.connect(pres);pres.connect(air);air.connect(sum);
+  // metallic resonance: short comb filter
+  const cd=ac.createDelay(.05);cd.delayTime.value=.0095;const fb=ac.createGain();fb.gain.value=.5;
+  const cbp=ac.createBiquadFilter();cbp.type="bandpass";cbp.frequency.value=1400;cbp.Q.value=.7;const cg=ac.createGain();cg.gain.value=P.metal;
+  inp.connect(cd);cd.connect(fb);fb.connect(cd);cd.connect(cbp);cbp.connect(cg);cg.connect(sum);
+  // subtle digital ring modulation
+  if(P.ring>0){const rg=ac.createGain();rg.gain.value=0;const ro=ac.createOscillator();ro.frequency.value=52;const rd=ac.createGain();rd.gain.value=1;ro.connect(rd);rd.connect(rg.gain);ro.start();
+    const rh=ac.createBiquadFilter();rh.type="highpass";rh.frequency.value=280;const ra=ac.createGain();ra.gain.value=P.ring;inp.connect(rg);rg.connect(rh);rh.connect(ra);ra.connect(sum)}
+  // doubled voice (chorus) for width
+  for(const [d,f,pan] of [[.017,.55,-.6],[.023,.8,.6]]){const dl=ac.createDelay(.05);dl.delayTime.value=d;const lf=ac.createOscillator();lf.frequency.value=f;const ld=ac.createGain();ld.gain.value=.0022;lf.connect(ld);ld.connect(dl.delayTime);lf.start();
+    const g=ac.createGain();g.gain.value=P.chorus;inp.connect(dl);dl.connect(g);
+    if(ac.createStereoPanner){const p=ac.createStereoPanner();p.pan.value=pan;g.connect(p);p.connect(sum)}else g.connect(sum)}
+  // broadcast compression
+  const comp=ac.createDynamicsCompressor();comp.threshold.value=-20;comp.knee.value=8;comp.ratio.value=3.5;comp.attack.value=.004;comp.release.value=.18;
+  sum.connect(comp);
+  // short cinematic hall
+  const rv=ac.createConvolver(),SR=ac.sampleRate,L=Math.floor(SR*P.ir),ir=ac.createBuffer(2,L,SR);
+  for(let ch=0;ch<2;ch++){const d=ir.getChannelData(ch);let lp=0;for(let i=0;i<L;i++){const x=Math.random()*2-1;lp+=(x-lp)*.35;d[i]=lp*Math.pow(1-i/L,3)}}
+  rv.buffer=ir;const wet=ac.createGain();wet.gain.value=P.wet;const dry=ac.createGain();dry.gain.value=1;const mk=ac.createGain();mk.gain.value=1.05;
+  comp.connect(dry);comp.connect(rv);rv.connect(wet);dry.connect(mk);wet.connect(mk);mk.connect(outAn);
+  vfxNodes[level]=inp;return inp;
+}
 function playBuffer(buf,item){
   ensureAudio();setSession("playback");try{if(outCtx.state!=="running")outCtx.resume()}catch(_){}
-  const src=outCtx.createBufferSource();src.buffer=buf;src.connect(outAn);
+  const lvl=(item.snap&&item.snap.vfx)||cfg.vfx;
+  const src=outCtx.createBufferSource();src.buffer=buf;src.connect(voiceInput(lvl));if(VFX[lvl])src.playbackRate.value=VFX[lvl].rate;
   src.onended=()=>{if(curSrc===src)curSrc=null;if(item.id===turnId)speakNext()};
   const d0=buf.getChannelData(0);let i0=0;const lim=Math.min(d0.length,buf.sampleRate*2);
   while(i0<lim&&Math.abs(d0[i0])<.02)i0++;
@@ -954,6 +1004,7 @@ $("bSave").onclick=()=>{
   draft[panelProv]={key:$("apiKey").value.replace(/[\s"'`]+/g,""),model:$("model").value};
   cfg.provider=panelProv;cfg.key=draft.claude.key;cfg.model=draft.claude.model||cfg.model;cfg.gkey=draft.gemini.key;cfg.gmodel=draft.gemini.model||cfg.gmodel;
   if(panelProv!=="gemini"&&cleanKey($("gttsKey").value))cfg.gkey=draft.gemini.key=cleanKey($("gttsKey").value);
+  cfg.vfx=$("vfx").value;store.set("vfx",cfg.vfx);
   cfg.engine=$("engine").value;cfg.gvoice=$("gvoice").value;cfg.gttsModel=$("gttsModel").value;geminiOk=null;geminiCool=0;
   cfg.ekey=cleanKey($("ekey").value);cfg.evoice=$("evoice").value;cfg.ecustom=cleanKey($("ecustom").value);cfg.emodel=$("emodel").value;
   cfg.voice=$("voice").value;cfg.rate=+$("rate").value;cfg.pitch=+$("pitch").value;
@@ -967,7 +1018,7 @@ $("bSave").onclick=()=>{
 $("bTest").onclick=()=>{
   ensureAudio();stopRec();stopSpeaking();const id=turnId;streamDone=true;
   const gk=panelProv==="gemini"?cleanKey($("apiKey").value):(cleanKey($("gttsKey").value)||cfg.gkey);
-  snapOverride={engine:$("engine").value,gkey:gk,gvoice:$("gvoice").value,gttsModel:$("gttsModel").value,ekey:cleanKey($("ekey").value),
+  snapOverride={vfx:$("vfx").value,engine:$("engine").value,gkey:gk,gvoice:$("gvoice").value,gttsModel:$("gttsModel").value,ekey:cleanKey($("ekey").value),
     evoice:cleanKey($("ecustom").value)||$("evoice").value,emodel:$("emodel").value,voice:$("voice").value,rate:+$("rate").value,pitch:+$("pitch").value};
   geminiCool=0;
   if(engineOf(snapOverride)!==snapOverride.engine)note(snapOverride.engine==="browser"?"":"ألصق المفتاح أولاً لتجربة الصوت الواقعي، هذا صوت المتصفح.");
