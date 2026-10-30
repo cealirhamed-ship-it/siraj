@@ -178,6 +178,11 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     </select>
     <div class="hint">تعمل مع أصوات Gemini وElevenLabs. اضغط «جرّب الصوت» لتسمع الفرق.</div>
   </div>
+  <div class="fld">
+    <label for="grit">مستوى الخشونة <span class="val" id="gritV"></span></label>
+    <input id="grit" type="range" min="0" max="100" step="5">
+    <div class="hint">يضيف بحّة وغلظة للصوت. حرّكه ثم اضغط «جرّب الصوت».</div>
+  </div>
   <div class="grp" id="gGemini">
     <div class="fld">
       <label for="gvoice">صوت Gemini</label>
@@ -287,7 +292,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <button class="btn" id="bTest">جرّب الصوت</button>
     <button class="btn" id="bClear">مسح المحادثة</button>
   </div>
-  <div class="ver">الإصدار 3.1</div>
+  <div class="ver">الإصدار 3.2</div>
   <div class="keys">
     <kbd>Space</kbd> تحدّث أو قاطع &nbsp; <kbd>F</kbd> ملء الشاشة &nbsp; <kbd>C</kbd> النص &nbsp; <kbd>Esc</kbd> إغلاق
   </div>
@@ -320,6 +325,7 @@ const cfg={
   captions:store.get("captions","1")==="1",
   engine:store.get("engine","gemini"),
   vfx:store.get("vfx","mid"),
+  grit:+store.get("grit","20"),
   gvoice:store.get("gvoice","Charon"),
   gttsModel:store.get("gttsModel","gemini-3.8-flash-tts"),
   ekey:store.get("ekey",""),
@@ -360,7 +366,7 @@ $("provider").onchange=()=>{draft[panelProv].key=$("apiKey").value.trim();draft[
 let memory=[];try{memory=JSON.parse(store.get("memory","[]"))||[]}catch(_){memory=[]}
 function showMem(){$("memCount").textContent=memory.length?memory.length+" معلومة":"فارغة";$("memList").textContent=memory.map(m=>"• "+m).join("\n")}
 function fillPanel(){
-  $("vfx").value=cfg.vfx;$("style").value=cfg.style;$("live").checked=cfg.live;$("wake").checked=cfg.wake;$("barge").checked=cfg.barge;$("fullIntro").checked=cfg.fullIntro;
+  $("vfx").value=cfg.vfx;$("grit").value=cfg.grit;$("gritV").textContent=cfg.grit+"%";$("style").value=cfg.style;$("live").checked=cfg.live;$("wake").checked=cfg.wake;$("barge").checked=cfg.barge;$("fullIntro").checked=cfg.fullIntro;
   $("wakeHint").textContent=`لا يرد إلا إذا ناديته باسمه، مثل «يا ${cfg.name}، كم الساعة؟». بعد كل رد تستطيع المتابعة 10 ثوانٍ دون نداء.`;
   $("bargeHint").hidden=false;showMem();$("memList").hidden=true;
   draft.claude={key:cfg.key,model:cfg.model};draft.gemini={key:cfg.gkey,model:cfg.gmodel};showProvider(cfg.provider);
@@ -370,7 +376,8 @@ function fillPanel(){
   $("recLang").value=cfg.recLang;$("aname").value=cfg.name;showVals();fillVoices();
 }
 function showVals(){$("rateV").textContent=(+$("rate").value).toFixed(2);$("pitchV").textContent=(+$("pitch").value).toFixed(2)}
-$("rate").oninput=showVals;$("pitch").oninput=showVals;
+$("rate").oninput=showVals;
+$("grit").oninput=()=>{$("gritV").textContent=$("grit").value+"%";setGrit($("grit").value)};$("pitch").oninput=showVals;
 
 /* ---------- voices ---------- */
 const synth=window.speechSynthesis;
@@ -607,13 +614,19 @@ function speakNext(){
     .catch(err=>{if(item.id!==turnId||err.name==="AbortError")return;console.warn(err);note(err.message||"تعذّر الصوت الواقعي، استخدمت صوت المتصفح.");speakBrowser(item)});
 }
 const VFX={
+  off:   {rate:1.00,low:0,pres:0,air:0,metal:0,ring:0,chorus:0,wet:0,ir:.4},
   light: {rate:1.00,low:3,pres:2,air:2,metal:.10,ring:0,  chorus:.16,wet:.12,ir:1.4},
   mid:   {rate:.97,low:5,pres:3,air:2.5,metal:.20,ring:.06,chorus:.26,wet:.17,ir:1.8},
   strong:{rate:.93,low:6,pres:3.5,air:3,metal:.34,ring:.14,chorus:.34,wet:.22,ir:2.2}
 };
-let vfxNodes={};
+let vfxNodes={},gritNodes=[],gritNow=-1;
+function setGrit(v){
+  const x=Math.max(0,Math.min(100,+v||0))/100;gritNow=x;if(!outCtx)return;
+  const t=outCtx.currentTime;
+  for(const n of gritNodes){n.gPre.gain.setTargetAtTime(1+x*5,t,.05);n.gMix.gain.setTargetAtTime(x*.75,t,.05);n.fd.gain.setTargetAtTime(x*.2,t,.05);n.body.gain.setTargetAtTime(x*4,t,.05)}
+}
 function voiceInput(level){
-  if(!VFX[level])return outAn;
+  if(!VFX[level])level="off";
   if(vfxNodes[level])return vfxNodes[level];
   const ac=outCtx,P=VFX[level],inp=ac.createGain();
   // tone: warmth, presence and air
@@ -634,15 +647,26 @@ function voiceInput(level){
   for(const [d,f,pan] of [[.017,.55,-.6],[.023,.8,.6]]){const dl=ac.createDelay(.05);dl.delayTime.value=d;const lf=ac.createOscillator();lf.frequency.value=f;const ld=ac.createGain();ld.gain.value=.0022;lf.connect(ld);ld.connect(dl.delayTime);lf.start();
     const g=ac.createGain();g.gain.value=P.chorus;inp.connect(dl);dl.connect(g);
     if(ac.createStereoPanner){const p=ac.createStereoPanner();p.pan.value=pan;g.connect(p);p.connect(sum)}else g.connect(sum)}
+  // roughness: saturated parallel layer + vocal-fry flutter + extra body
+  const gHP=ac.createBiquadFilter();gHP.type="highpass";gHP.frequency.value=140;
+  const gPre=ac.createGain();gPre.gain.value=1;
+  const sh=ac.createWaveShaper();{const c=new Float32Array(2048);for(let i=0;i<2048;i++){const x=i/1023.5-1;c[i]=Math.tanh(7*x)/Math.tanh(7)}sh.curve=c;sh.oversample="2x"}
+  const gLP=ac.createBiquadFilter();gLP.type="lowpass";gLP.frequency.value=3800;gLP.Q.value=.6;
+  const gMix=ac.createGain();gMix.gain.value=0;
+  inp.connect(gHP);gHP.connect(gPre);gPre.connect(sh);sh.connect(gLP);gLP.connect(gMix);gMix.connect(sum);
+  const body=ac.createBiquadFilter();body.type="lowshelf";body.frequency.value=220;body.gain.value=0;
+  const fry=ac.createGain();fry.gain.value=1;const fo=ac.createOscillator();fo.type="triangle";fo.frequency.value=78;const fd=ac.createGain();fd.gain.value=0;fo.connect(fd);fd.connect(fry.gain);fo.start();
+  sum.connect(body);body.connect(fry);
+  gritNodes.push({gPre,gMix,fd,body});
   // broadcast compression
   const comp=ac.createDynamicsCompressor();comp.threshold.value=-20;comp.knee.value=8;comp.ratio.value=3.5;comp.attack.value=.004;comp.release.value=.18;
-  sum.connect(comp);
+  fry.connect(comp);
   // short cinematic hall
   const rv=ac.createConvolver(),SR=ac.sampleRate,L=Math.floor(SR*P.ir),ir=ac.createBuffer(2,L,SR);
   for(let ch=0;ch<2;ch++){const d=ir.getChannelData(ch);let lp=0;for(let i=0;i<L;i++){const x=Math.random()*2-1;lp+=(x-lp)*.35;d[i]=lp*Math.pow(1-i/L,3)}}
   rv.buffer=ir;const wet=ac.createGain();wet.gain.value=P.wet;const dry=ac.createGain();dry.gain.value=1;const mk=ac.createGain();mk.gain.value=1.05;
   comp.connect(dry);comp.connect(rv);rv.connect(wet);dry.connect(mk);wet.connect(mk);mk.connect(outAn);
-  vfxNodes[level]=inp;return inp;
+  vfxNodes[level]=inp;setGrit(gritNow<0?cfg.grit:gritNow*100);return inp;
 }
 function playBuffer(buf,item){
   ensureAudio();setSession("playback");try{if(outCtx.state!=="running")outCtx.resume()}catch(_){}
@@ -998,13 +1022,13 @@ if(!document.documentElement.requestFullscreen||STANDALONE)$("bFull").hidden=tru
 $("stage").addEventListener("dblclick",e=>{e.preventDefault();toggleFull()});
 $("bCap").onclick=()=>{cfg.captions=!cfg.captions;store.set("captions",cfg.captions?"1":"0");document.body.classList.toggle("no-captions",!cfg.captions);$("bCap").setAttribute("aria-pressed",cfg.captions)};
 function openPanel(){fillPanel();$("panel").classList.add("open")}
-function closePanel(){$("panel").classList.remove("open")}
+function closePanel(){setGrit(cfg.grit);$("panel").classList.remove("open")}
 $("bSet").onclick=()=>$("panel").classList.contains("open")?closePanel():openPanel();
 $("bSave").onclick=()=>{
   draft[panelProv]={key:$("apiKey").value.replace(/[\s"'`]+/g,""),model:$("model").value};
   cfg.provider=panelProv;cfg.key=draft.claude.key;cfg.model=draft.claude.model||cfg.model;cfg.gkey=draft.gemini.key;cfg.gmodel=draft.gemini.model||cfg.gmodel;
   if(panelProv!=="gemini"&&cleanKey($("gttsKey").value))cfg.gkey=draft.gemini.key=cleanKey($("gttsKey").value);
-  cfg.vfx=$("vfx").value;store.set("vfx",cfg.vfx);
+  cfg.vfx=$("vfx").value;store.set("vfx",cfg.vfx);cfg.grit=+$("grit").value;store.set("grit",String(cfg.grit));
   cfg.engine=$("engine").value;cfg.gvoice=$("gvoice").value;cfg.gttsModel=$("gttsModel").value;geminiOk=null;geminiCool=0;
   cfg.ekey=cleanKey($("ekey").value);cfg.evoice=$("evoice").value;cfg.ecustom=cleanKey($("ecustom").value);cfg.emodel=$("emodel").value;
   cfg.voice=$("voice").value;cfg.rate=+$("rate").value;cfg.pitch=+$("pitch").value;
