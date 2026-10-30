@@ -684,8 +684,11 @@ function introFiles(){
   out.connect(comp);comp.connect(ac.destination);
   // charging builds with the particle stream and peaks right at the flash
   const c=ac.createBufferSource();c.buffer=sndBufs.charge;const cg=ac.createGain();
-  const CR=.8,cs=Math.max(t0,ti-5.77/CR);c.playbackRate.value=CR;
-  cg.gain.setValueAtTime(0,cs);cg.gain.linearRampToValueAtTime(1.8,cs+.6);cg.gain.setValueAtTime(1.8,ti-.03);cg.gain.linearRampToValueAtTime(0,ti+.22);
+  const CR=.65,cs=Math.max(t0+.3,ti-5.77/CR);c.playbackRate.value=CR;
+  if(cs>t0+.5){const pre=ac.createBufferSource();pre.buffer=sndBufs.charge;pre.playbackRate.value=CR;const pg=ac.createGain();
+    pg.gain.setValueAtTime(0,t0+.3);pg.gain.linearRampToValueAtTime(1.5,t0+.9);pg.gain.setValueAtTime(1.5,cs);pg.gain.linearRampToValueAtTime(0,cs+1.2);
+    pre.connect(pg);pg.connect(out);pre.start(t0+.3,1.0);pre.stop(cs+1.3)}
+  cg.gain.setValueAtTime(0,cs);cg.gain.linearRampToValueAtTime(1.8,cs+1.2);cg.gain.setValueAtTime(1.8,ti-.03);cg.gain.linearRampToValueAtTime(0,ti+.22);
   c.connect(cg);cg.connect(out);c.start(cs,0);c.stop(ti+.3);
   // metal discharge lands on the flash; its long tail settles under the greeting
   const m=ac.createBufferSource();m.buffer=sndBufs.impact;const mg=ac.createGain();
@@ -946,8 +949,8 @@ void main(){
   vec2 S=vec2(.5,.935)*A,P3=a*A;
   float rn=h(a),rn2=h(a+3.7),rn3=h(a+9.1),rf=h(a+5.3);
   float late=max(o-1.,0.),oo=min(o,1.);
-  float te=.4+oo*4.2+rn*.25+late*1.1;
-  float dur=1.7+rn2*.5+late*.9;
+  float te=.5+oo*6.0+rn*.35+late*1.5;
+  float dur=2.4+rn2*.7+late*1.2;
   float k=clamp((T-te)/dur,0.,1.);
   float u=1.-pow(1.-k,2.1);
   vec2 jit=(vec2(rn2,rn3)-.5)*.10;
@@ -1034,7 +1037,7 @@ function initGL(){
 function attr(prog,name,buf,size,type,norm){const l=gl.getAttribLocation(prog,name);gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.enableVertexAttribArray(l);gl.vertexAttribPointer(l,size,type,norm,0,0);return l}
 function drawGL(t,it,mouth){
   gl.viewport(0,0,glc.width,glc.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
-  const qf=introDone?1:Math.min(1,Math.max(0,(it-6.9)/.6));
+  const qf=introDone?1:Math.min(1,Math.max(0,(it-9.8)/.6));
   const G=[2/2,0.5*2/2-1,2/1.3,.15*2/1.3-1];
   if(qf>0){
     gl.disable(gl.BLEND);gl.useProgram(qProg);
@@ -1053,7 +1056,7 @@ function drawGL(t,it,mouth){
 }
 
 let parts=[],rings=[],shoots=[],motes=[],shocks=[],flash=0,shake=0,impacted=false,mtn=null,mtnSpark=[];
-const IMPACT=7.6,INTRO_END=9.4;
+const IMPACT=10.5,INTRO_END=12.3;
 const clk=()=>window.__vclock!=null?window.__vclock:performance.now()/1000;
 function introRunning(){return introT0>=0&&clk()-introT0<INTRO_END}
 function burst(n){
@@ -1157,10 +1160,10 @@ function frame(now){
   pulse*=Math.pow(.02,dt);
   const it=window.__introAt!=null?window.__introAt:(introT0<0?(introDone?99:0):t-introT0);
   introK=introT0<0&&introDone?Math.min(1,introK+dt):Math.min(1,Math.max(0,(it-IMPACT)/1.2));
-  const glowK=introT0<0&&introDone?1:Math.min(1,Math.max(0,(it-2.3)/4.3))*.7+.3*Math.min(1,Math.max(0,(it-IMPACT)/.6));
+  const glowK=introT0<0&&introDone?1:Math.min(1,Math.max(0,(it-3.2)/6))*.7+.3*Math.min(1,Math.max(0,(it-IMPACT)/.6));
   if(!impacted&&introT0>=0&&it>=IMPACT)triggerImpact();
   const hud=$("hudTxt");
-  if(introT0>=0&&it<IMPACT){hud.style.opacity=.85;hud.textContent="ASSEMBLING... "+Math.min(100,Math.round(it/6.9*100))+"%"}
+  if(introT0>=0&&it<IMPACT){hud.style.opacity=.85;hud.textContent="ASSEMBLING... "+Math.min(100,Math.round(it/9.8*100))+"%"}
   else if(introT0>=0||introDone){hud.style.opacity=.75;hud.textContent="STATUS: "+({sleep:"ONLINE",idle:"ONLINE",listening:"LISTENING",thinking:"THINKING",speaking:"SPEAKING"}[state]||"ONLINE")}
 
   let target;
