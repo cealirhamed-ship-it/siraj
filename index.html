@@ -277,7 +277,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <button class="btn" id="bTest">جرّب الصوت</button>
     <button class="btn" id="bClear">مسح المحادثة</button>
   </div>
-  <div class="ver">الإصدار 2.9</div>
+  <div class="ver">الإصدار 3.0</div>
   <div class="keys">
     <kbd>Space</kbd> تحدّث أو قاطع &nbsp; <kbd>F</kbd> ملء الشاشة &nbsp; <kbd>C</kbd> النص &nbsp; <kbd>Esc</kbd> إغلاق
   </div>
@@ -1051,10 +1051,13 @@ void main(){
   // hair: calm breeze sway (independent of speech) + inertia that trails the head motion
   float hair=smoothstep(.43,.10,uv.y)*smoothstep(.12,.24,uv.x)*smoothstep(.90,.78,uv.x);
   float tip=smoothstep(.40,.04,uv.y);tip*=tip;
-  float gust=.65+.35*sin(T*.23)*sin(T*.37+1.3);
-  float n=sin(T*.62+uv.y*7.+uv.x*3.)*.6+sin(T*1.07-uv.x*10.+uv.y*2.5)*.28+sin(T*1.9+uv.y*17.+uv.x*5.)*.12;
-  uv.x+=hair*(tip*.0026*gust*n+tip*HL.x);
-  uv.y+=hair*(tip*.0011*gust*sin(T*.9+uv.x*7.)+tip*HL.y);
+  float gust=.6+.4*(.5+.5*sin(T*.21))*(.6+.4*sin(T*.34+1.3));
+  float along=.42-uv.y;                                   // distance from the roots toward the tips
+  float wave=sin(T*1.15-along*13.+uv.x*2.5)*.65+sin(T*1.9-along*21.+uv.x*7.)*.25;
+  float strand=sin(T*1.6+uv.x*46.+uv.y*11.)*.5+sin(T*2.3-uv.x*71.+uv.y*5.)*.3;
+  float tipW=pow(tip,1.2);
+  uv.x+=hair*(tipW*(.0075*gust*wave+.0018*strand)+tip*HL.x);
+  uv.y+=hair*(tipW*(.0032*gust*sin(T*1.05-along*10.+uv.x*4.)+.0008*strand)+tip*HL.y);
   // jaw: lower face hinges down from below the ears; upper face and neck stay put
   vec2 mc=vec2(.5,.612);
   float hx=abs(v.x-.5)/.25;
@@ -1063,9 +1066,9 @@ void main(){
   float neck=1.-smoothstep(.70,.80,v.y);
   float jaw=hinge*side*neck;
   float open=M*(1.-.45*WD);
-  float drop=open*.019*jaw*(.6+.4*smoothstep(.6,.7,v.y));
+  float drop=open*.032*jaw*(.6+.4*smoothstep(.6,.7,v.y));
   uv.y-=drop;
-  uv.x-=(v.x-.5)*open*.035*jaw;
+  uv.x-=(v.x-.5)*open*.045*jaw;
   // lips: corners stretch outwards on bright vowels, round inwards on open ones
   vec2 q=(v-mc)/vec2(.11,.05);
   float lips=exp(-dot(q,q)*1.6);
@@ -1545,8 +1548,8 @@ function frame(now){
   let mt=0,wt=.4;
   if(state==="speaking"){
     if(window.__mouth!=null){mt=window.__mouth;wt=window.__wide!=null?window.__wide:.4}
-    else if(curSrc){mt=Math.pow(Math.min(1,Math.max(0,(outLevel-.2)*1.05)),.85);wt=readShape()}
-    else if(browserTalking){
+    else if(curSrc){mt=Math.pow(Math.min(1,Math.max(0,(outLevel-.12)*1.45)),.8);wt=readShape()}
+    else if(browserTalking||window.__talk){
       if(t>syl.end){const gap=Math.random()<.18;syl={s:t,end:t+(gap?.07+Math.random()*.08:.11+Math.random()*.16),p:gap?0:.35+Math.random()*.65,w:Math.random()}}
       const ph=Math.min(1,(t-syl.s)/(syl.end-syl.s));mt=syl.p*Math.pow(Math.sin(Math.PI*ph),.7);wt=syl.w;
     }
@@ -1554,7 +1557,7 @@ function frame(now){
   mouth+=(mt-mouth)*Math.min(1,dt*(mt>mouth?22:11));
   wide+=(wt-wide)*Math.min(1,dt*10);
   // head: small nods that follow the stress of the voice, slow drift while talking
-  talkAmt+=((state==="speaking"&&(curSrc||browserTalking)?1:0)-talkAmt)*Math.min(1,dt*2);
+  talkAmt+=((state==="speaking"&&(curSrc||browserTalking||window.__talk)?1:0)-talkAmt)*Math.min(1,dt*2);
   nodSlow+=(mouth-nodSlow)*Math.min(1,dt*3.5);
   const nodT=(mouth-nodSlow)*1.6+talkAmt*.25*Math.sin(t*1.7);
   const ny0=nod.y;nod.y+=(nodT-nod.y)*Math.min(1,dt*7);
