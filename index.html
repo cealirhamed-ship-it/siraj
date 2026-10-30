@@ -401,7 +401,7 @@ function listen(){
 }
 
 /* ---------- speaking ---------- */
-let queue=[],speaking=false,streamDone=true,pulse=0,turnId=0;
+let browserTalking=false,queue=[],speaking=false,streamDone=true,pulse=0,turnId=0;
 function clean(t){
   return t.replace(/https?:\/\/\S+/g,"").replace(/[*#_`>|~\[\]]/g,"")
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu,"").replace(/\s+/g," ").trim();
@@ -536,14 +536,14 @@ function speakBrowser(item){
   const u=new SpeechSynthesisUtterance(item.t);
   const v=voices.find(x=>x.name===sn.voice)||voices[0]||null;if(v){u.voice=v;u.lang=v.lang}else u.lang="ar-SA";
   u.rate=sn.rate;u.pitch=sn.pitch;
-  u.onstart=()=>{if(item.id===turnId){setState("speaking");pulse=1}};
+  u.onstart=()=>{if(item.id===turnId){browserTalking=true;setState("speaking");pulse=1}};
   u.onboundary=()=>{pulse=1;burst(6)};
-  u.onend=u.onerror=()=>{if(item.id===turnId)speakNext()};
+  u.onend=u.onerror=()=>{browserTalking=false;if(item.id===turnId)speakNext()};
   synth.speak(u);
 }
 function stopSpeaking(){
   turnId++;queue=[];speaking=false;cbuf="";
-  if(synth)synth.cancel();
+  if(synth)synth.cancel();browserTalking=false;
   if(curSrc){const s=curSrc;curSrc=null;s.onended=null;try{s.stop()}catch(_){}}
   ttsAbort.abort();ttsAbort=new AbortController();
   if(ctrl){ctrl.abort();ctrl=null}
@@ -792,7 +792,7 @@ async function start(){
   const id=turnId;streamDone=true;
   const g=activeKey()?`أهلاً بك، أنا ${cfg.name}. أنا أسمعك الآن، تفضّل بالحديث.`
                  :`أهلاً بك، أنا ${cfg.name}. قبل أن نبدأ، ألصق مفتاح الاتصال في الإعدادات، ثم تحدّث معي مباشرة.`;
-  setSay(g);setState("speaking");speak(g,id);
+  setSay(g);setState("thinking");speak(g,id);
   if(!synth)listen();
   if(!activeKey())openPanel();
 }
@@ -830,7 +830,7 @@ $("bSave").onclick=()=>{
   cfg.recLang=$("recLang").value;cfg.name=$("aname").value.trim()||"سراج";
   for(const k of ["provider","key","model","gkey","gmodel","engine","gvoice","gttsModel","ekey","evoice","ecustom","emodel","voice","rate","pitch","recLang","name"])store.set(k,String(cfg[k]));
   applyName();closePanel();
-  if(started){stopSpeaking();const id=turnId;streamDone=true;const m="تم الحفظ. تفضّل، أنا أسمعك.";setSay(m);setState("speaking");speak(m,id)}
+  if(started){stopSpeaking();const id=turnId;streamDone=true;const m="تم الحفظ. تفضّل، أنا أسمعك.";setSay(m);setState("thinking");speak(m,id)}
 };
 $("bTest").onclick=()=>{
   ensureAudio();stopRec();stopSpeaking();const id=turnId;streamDone=true;
@@ -1165,7 +1165,8 @@ function frame(now){
   let target;
   outLevel+=(readOut()-outLevel)*.5;
   if(state==="speaking"&&curSrc){target=.3+Math.min(.85,outLevel*1.5)+.15*pulse;if(outLevel>.35&&Math.random()<.5)burst(2)}
-  else if(state==="speaking")target=.42+.3*Math.abs(nz(t*4.2))+.35*pulse;
+  else if(state==="speaking"&&browserTalking)target=.42+.3*Math.abs(nz(t*4.2))+.35*pulse;
+  else if(state==="speaking")target=.3+.08*Math.sin(t*5);
   else if(state==="listening")target=.18+Math.min(.7,micLevel*1.6);
   else if(state==="thinking")target=.3+.08*Math.sin(t*5);
   else target=.12+.05*Math.sin(t*1.2);
@@ -1175,8 +1176,8 @@ function frame(now){
   let mt=0;
   if(state==="speaking"){
     if(window.__mouth!=null)mt=window.__mouth;
-    else if(curSrc)mt=Math.min(1,Math.max(0,(outLevel-.05)*2.4));
-    else if(speaking)mt=(.5+.5*Math.sin(t*12.5))*(.35+.65*Math.abs(nz(t*3.3)));
+    else if(curSrc)mt=Math.pow(Math.min(1,Math.max(0,(outLevel-.12)*.95)),.85);
+    else if(browserTalking)mt=(.5+.5*Math.sin(t*12.5))*(.35+.65*Math.abs(nz(t*3.3)));
   }
   mouth+=(mt-mouth)*Math.min(1,dt*(mt>mouth?26:13));
 
@@ -1262,7 +1263,7 @@ function frame(now){
 
   requestAnimationFrame(frame);
 }
-window.__siraj={dbg:()=>({snd:!!sndBufs,introT0,ctx:outCtx&&outCtx.state}),say:t=>handleUser(t),state:s=>setState(s),renderWav:async()=>{const SRr=44100,oc=new OfflineAudioContext(2,SRr*11,SRr);const prev=outCtx;outCtx=oc;introSound();outCtx=prev;const b=await oc.startRendering();
+window.__siraj={dbg:()=>({snd:!!sndBufs,introT0,ctx:outCtx&&outCtx.state,mouth:+mouth.toFixed(3),state,playing:!!curSrc}),say:t=>handleUser(t),state:s=>setState(s),renderWav:async()=>{const SRr=44100,oc=new OfflineAudioContext(2,SRr*11,SRr);const prev=outCtx;outCtx=oc;introSound();outCtx=prev;const b=await oc.startRendering();
     const L=b.length,l=b.getChannelData(0),r=b.getChannelData(1),buf=new ArrayBuffer(44+L*4),v=new DataView(buf);
     const ws=(o,t)=>{for(let i=0;i<t.length;i++)v.setUint8(o+i,t.charCodeAt(i))};ws(0,"RIFF");v.setUint32(4,36+L*4,true);ws(8,"WAVE");ws(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,2,true);v.setUint32(24,SRr,true);v.setUint32(28,SRr*4,true);v.setUint16(32,4,true);v.setUint16(34,16,true);ws(36,"data");v.setUint32(40,L*4,true);
     for(let i=0;i<L;i++){v.setInt16(44+i*4,Math.max(-1,Math.min(1,l[i]))*32767,true);v.setInt16(46+i*4,Math.max(-1,Math.min(1,r[i]))*32767,true)}
