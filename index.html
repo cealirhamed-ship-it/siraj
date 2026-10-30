@@ -94,6 +94,7 @@ input[type=range]{width:100%;accent-color:var(--cyan)}
 [hidden]{display:none!important}
 .grp{display:flex;flex-direction:column;gap:16px}
 #note{min-height:1em;font-size:12px;color:var(--amber);opacity:0;transition:opacity .5s;max-width:60ch;text-align:center}
+.ver{font-size:11px;color:var(--ink-faint);font-variant-numeric:tabular-nums}
 .keys{font-size:12px;color:var(--ink-faint);line-height:1.9;border-top:1px solid var(--line);padding-top:12px}
 kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--ink-dim)}
 @media (max-width:600px) and (orientation:portrait){
@@ -244,6 +245,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <button class="btn" id="bTest">جرّب الصوت</button>
     <button class="btn" id="bClear">مسح المحادثة</button>
   </div>
+  <div class="ver">الإصدار 1.7</div>
   <div class="keys">
     <kbd>Space</kbd> تحدّث أو قاطع &nbsp; <kbd>F</kbd> ملء الشاشة &nbsp; <kbd>C</kbd> النص &nbsp; <kbd>Esc</kbd> إغلاق
   </div>
@@ -528,7 +530,10 @@ function playBuffer(buf,item){
   ensureAudio();setSession("playback");try{if(outCtx.state!=="running")outCtx.resume()}catch(_){}
   const src=outCtx.createBufferSource();src.buffer=buf;src.connect(outAn);
   src.onended=()=>{if(curSrc===src)curSrc=null;if(item.id===turnId)speakNext()};
-  curSrc=src;setState("speaking");pulse=1;src.start();
+  const d0=buf.getChannelData(0);let i0=0;const lim=Math.min(d0.length,buf.sampleRate*2);
+  while(i0<lim&&Math.abs(d0[i0])<.02)i0++;
+  const off=i0>=lim?0:Math.max(0,i0/buf.sampleRate-.015);
+  curSrc=src;setState("speaking");pulse=1;src.start(0,off);
 }
 function speakBrowser(item){
   if(!synth){speakNext();return}
@@ -536,9 +541,10 @@ function speakBrowser(item){
   const u=new SpeechSynthesisUtterance(item.t);
   const v=voices.find(x=>x.name===sn.voice)||voices[0]||null;if(v){u.voice=v;u.lang=v.lang}else u.lang="ar-SA";
   u.rate=sn.rate;u.pitch=sn.pitch;
-  u.onstart=()=>{if(item.id===turnId){browserTalking=true;setState("speaking");pulse=1}};
-  u.onboundary=()=>{pulse=1;burst(6)};
-  u.onend=u.onerror=()=>{browserTalking=false;if(item.id===turnId)speakNext()};
+  let bt=0;
+  u.onstart=()=>{if(item.id===turnId){setState("speaking");bt=setTimeout(()=>{if(item.id===turnId)browserTalking=true},1100)}};
+  u.onboundary=()=>{if(item.id!==turnId)return;clearTimeout(bt);browserTalking=true;pulse=1;burst(6)};
+  u.onend=u.onerror=()=>{clearTimeout(bt);browserTalking=false;if(item.id===turnId)speakNext()};
   synth.speak(u);
 }
 function stopSpeaking(){
@@ -1180,7 +1186,7 @@ function frame(now){
   let mt=0;
   if(state==="speaking"){
     if(window.__mouth!=null)mt=window.__mouth;
-    else if(curSrc)mt=Math.pow(Math.min(1,Math.max(0,(outLevel-.12)*.95)),.85);
+    else if(curSrc)mt=Math.pow(Math.min(1,Math.max(0,(outLevel-.2)*1.05)),.85);
     else if(browserTalking)mt=(.5+.5*Math.sin(t*12.5))*(.35+.65*Math.abs(nz(t*3.3)));
   }
   mouth+=(mt-mouth)*Math.min(1,dt*(mt>mouth?26:13));
