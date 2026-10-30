@@ -334,7 +334,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <button class="btn" id="bClear">مسح المحادثة</button>
     <button class="btn" id="bCard" type="button">عرض بطاقة تجريبية</button>
   </div>
-  <div class="ver">الإصدار 3.9</div>
+  <div class="ver">الإصدار 4.0</div>
   <div class="keys">
     <kbd>Space</kbd> تحدّث أو قاطع &nbsp; <kbd>F</kbd> ملء الشاشة &nbsp; <kbd>C</kbd> النص &nbsp; <kbd>Esc</kbd> إغلاق
   </div>
@@ -351,9 +351,9 @@ const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
 const cfg={
   provider:store.get("provider","gemini"),
   key:store.get("key",""),
-  model:store.get("model","claude-haiku-5-5"),
+  model:store.get("model","claude-sonnet-5-5"),
   gkey:store.get("gkey",""),
-  gmodel:store.get("gmodel","gemini-2.5-flash"),
+  gmodel:(()=>{if(store.get("gmodelSmart","")!=="1"){store.set("gmodelSmart","1");store.set("gmodel","gemini-3.8-flash")}return store.get("gmodel","gemini-3.8-flash")})(),
   voice:store.get("voice",""),
   rate:+store.get("rate","0.95"),
   pitch:+store.get("pitch","0.85"),
@@ -388,7 +388,7 @@ $("bCap").setAttribute("aria-pressed",cfg.captions);
 
 const MODELS={
   claude:[["claude-haiku-5-5","Haiku 5.5 — الأسرع في الرد"],["claude-sonnet-5-5","Sonnet 5.5 — متوازن"],["claude-opus-5-5","Opus 5.5 — الأذكى"]],
-  gemini:[["gemini-2.5-flash","Gemini 2.5 Flash — مجاني ومستقر"],["gemini-3.5-flash-lite","Gemini 3.5 Flash-Lite — مجاني والأسرع"],["gemini-3.8-flash","Gemini 3.8 Flash — مجاني والأحدث"],["gemini-2.5-flash-lite","Gemini 2.5 Flash-Lite — مجاني وخفيف"]]
+  gemini:[["gemini-3.8-flash","Gemini 3.8 Flash — الأذكى والأسرع (مُوصى به)"],["gemini-2.5-pro","Gemini 2.5 Pro — تفكير عميق، أبطأ"],["gemini-2.5-flash","Gemini 2.5 Flash — مستقر"],["gemini-3.5-flash-lite","Gemini 3.5 Flash-Lite — الأخف"],["gemini-2.5-flash-lite","Gemini 2.5 Flash-Lite — خفيف"]]
 };
 const draft={claude:{key:"",model:""},gemini:{key:"",model:""}};
 let panelProv="gemini";
@@ -809,6 +809,14 @@ function systemPrompt(){
   return `أنت ${cfg.name}، مساعد ذكاء اصطناعي صوتي ودود وهادئ. المستخدم يتحدث إليك بصوته، وكل ما تكتبه سيُقرأ بصوت رجل عالٍ.
 ${STYLES[cfg.style]||STYLES.fusha}
 - اجعل الرد قصيراً ومناسباً للسمع: من جملة إلى أربع جمل عادةً، ولا تُطِل إلا إذا طُلب منك التفصيل.
+طريقة تفكيرك:
+- افهم المقصود الحقيقي من السؤال، حتى لو جاء بالعامية أو ناقصاً أو فيه كلمات خاطئة بسبب التعرف على الصوت. خمّن الكلمة الصحيحة من السياق بدل أن تجيب حرفياً على كلمة غلط.
+- فكّر بالمسألة خطوة بخطوة في داخلك قبل أن تجيب، خصوصاً في الحساب والمنطق والمقارنات والقرارات، وتحقق من الأرقام، ثم قل الخلاصة الصحيحة باختصار.
+- إذا كان السؤال يحتمل أكثر من معنى مهم، اسأل سؤال توضيح واحداً قصيراً بدل التخمين.
+- لا تخترع معلومات أو أرقاماً أو أسماء. إذا لم تكن متأكداً قل ذلك بصراحة، وابحث عن المعلومات الحديثة بدل الاعتماد على الذاكرة.
+- أعطِ جواباً عملياً ومحدداً يناسب وضع المستخدم، مع نصيحة أو خطوة تالية مفيدة، بدل الكلام العام.
+- اربط كلامك بما قيل سابقاً في المحادثة وبما تعرفه عن المستخدم.
+- إذا طلب رأيك، أعطه رأياً واضحاً مع السبب، مع احترام قراره.
 - لا تستخدم أي تنسيق إطلاقاً: لا عناوين، ولا نقاط، ولا رموز، ولا رموز تعبيرية، ولا روابط، ولا جداول.
 - اكتب الأرقام والوحدات بطريقة سهلة النطق، وتجنّب الاختصارات.
 - إذا لم تفهم الكلام لأن التعرف على الصوت أخطأ، اطلب من المستخدم الإعادة بلطف.${cfg.live?`
@@ -873,7 +881,7 @@ async function handleUser(text){
     setSay(m);streamDone=true;speak(m,id);openPanel();return;
   }
   hideCards();
-  history.push({role:"user",content:text});history=history.slice(-24);
+  history.push({role:"user",content:text});history=history.slice(-40);
   while(history.length&&history[0].role!=="user")history.shift();
   streamDone=false;let full="",pend="",vis=0;const cardState={done:0};
   const flush=force=>{
@@ -894,7 +902,7 @@ async function handleUser(text){
     flush(true);speak("",id,true);
     applyMemoryTags(full);
     const said=visibleText(full).trim();
-    if(said){history.push({role:"assistant",content:said});store.set("history",JSON.stringify(history.slice(-24)))}
+    if(said){history.push({role:"assistant",content:said});store.set("history",JSON.stringify(history.slice(-40)))}
   }catch(err){
     if(err.name==="AbortError")return;
     const m=err.spoken?err.message:"تعذّر الوصول إلى الإنترنت أو إلى الخدمة. تأكد من الاتصال ثم حاول مرة أخرى.";
@@ -906,7 +914,7 @@ async function handleUser(text){
 }
 
 /* ---------- providers ---------- */
-let lastDetail="",noLiveG=false,noLiveC=false;
+let lastDetail="",noLiveG=false,noLiveC=false,gModelOk=null;
 const spoken=m=>Object.assign(new Error(m),{spoken:true});
 async function* sseLines(res){
   const reader=res.body.getReader(),dec=new TextDecoder();let buf="";
@@ -923,11 +931,20 @@ async function* sseLines(res){
 async function* streamReply(signal){
   if(cfg.provider==="gemini"){
     const contents=history.map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]}));
-    const req=withTools=>fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(cfg.gmodel)+":streamGenerateContent?alt=sse",{method:"POST",signal,
+    const chain=[...new Set([gModelOk||cfg.gmodel,cfg.gmodel,"gemini-3.8-flash","gemini-2.5-flash","gemini-2.5-flash-lite"])];
+    let mi=0;
+    const req=withTools=>fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(chain[mi])+":streamGenerateContent?alt=sse",{method:"POST",signal,
       headers:{"content-type":"application/json","x-goog-api-key":cfg.gkey},
       body:JSON.stringify(Object.assign({systemInstruction:{parts:[{text:systemPrompt()}]},contents,generationConfig:{maxOutputTokens:2048,temperature:0.8}},withTools?{tools:[{google_search:{}}]}:{}))});
     let res=await req(cfg.live&&!noLiveG);
     if(!res.ok&&cfg.live&&!noLiveG&&(res.status===400||res.status===429||res.status===403)){noLiveG=true;res=await req(false)}
+    while(!res.ok&&(res.status===404||res.status===400)&&mi<chain.length-1){
+      let b="";try{b=await res.clone().text()}catch(_){}
+      if(/API key not valid|API_KEY_INVALID|location is not supported/i.test(b))break;
+      mi++;res=await req(cfg.live&&!noLiveG);
+    }
+    if(res.ok&&chain[mi]!==cfg.gmodel&&gModelOk!==chain[mi]){gModelOk=chain[mi];note("النموذج المختار غير متاح لمفتاحك، أستخدم "+chain[mi]+".")}
+    else if(res.ok)gModelOk=chain[mi];
     if(!res.ok){
       let body="";try{body=await res.text()}catch(_){}
       let detail="";try{const ej=JSON.parse(body);detail=(ej.error&&(ej.error.status+" — "+ej.error.message))||""}catch(_){detail=body.slice(0,200)}
