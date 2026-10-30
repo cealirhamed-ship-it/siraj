@@ -299,7 +299,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <label for="style">أسلوب الكلام</label>
     <select id="style">
       <option value="fusha">فصحى مبسطة وهادئة</option>
-      <option value="iraqi">لهجة عراقية واضحة</option>
+      <option value="iraqi">عراقي بغدادي شعبي</option>
       <option value="formal">فصحى رسمية رصينة</option>
       <option value="fun">مرح وخفيف الظل</option>
     </select>
@@ -331,7 +331,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <button class="btn" id="bClear">مسح المحادثة</button>
     <button class="btn" id="bCard" type="button">عرض بطاقة تجريبية</button>
   </div>
-  <div class="ver">الإصدار 3.6</div>
+  <div class="ver">الإصدار 3.7</div>
   <div class="keys">
     <kbd>Space</kbd> تحدّث أو قاطع &nbsp; <kbd>F</kbd> ملء الشاشة &nbsp; <kbd>C</kbd> النص &nbsp; <kbd>Esc</kbd> إغلاق
   </div>
@@ -356,7 +356,7 @@ const cfg={
   pitch:+store.get("pitch","0.85"),
   recLang:store.get("recLang","ar-IQ"),
   name:store.get("name","سراج"),
-  style:store.get("style","fusha"),
+  style:(()=>{if(store.get("styleIQ","")!=="1"){store.set("styleIQ","1");store.set("style","iraqi");store.set("recLang","ar-IQ")}return store.get("style","iraqi")})(),
   live:store.get("live","1")==="1",
   wake:store.get("wake","0")==="1",
   barge:store.get("barge","0")==="1",
@@ -501,7 +501,7 @@ if(SR){
       const rest=wakeMatch(fin.trim());
       if(rest===null)return;
       setYou(fin.trim());
-      if(rest.length<2){gotFinal=true;try{rec.stop()}catch(_){};awake=true;stopSpeaking();const id=turnId;streamDone=true;setSay("نعم؟");setState("thinking");speak("نعم؟",id);return}
+      if(rest.length<2){gotFinal=true;try{rec.stop()}catch(_){};awake=true;stopSpeaking();const id=turnId;streamDone=true;const y=PH.yes();setSay(y);setState("thinking");speak(y,id);return}
       gotFinal=true;try{rec.stop()}catch(_){};awake=false;handleUser(rest);return;
     }
     setYou(heard);
@@ -528,7 +528,7 @@ function clean(t){
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu,"").replace(/\s+/g," ").trim();
 }
 const cleanKey=v=>(v||"").replace(/[\s"'`]+/g,"");
-function ttsSnap(){return {vfx:cfg.vfx,engine:cfg.engine,gkey:cfg.gkey,gvoice:cfg.gvoice,gttsModel:cfg.gttsModel,ekey:cfg.ekey,evoice:cfg.ecustom||cfg.evoice,emodel:cfg.emodel,voice:cfg.voice,rate:cfg.rate,pitch:cfg.pitch}}
+function ttsSnap(){return {accent:cfg.style==="iraqi",vfx:cfg.vfx,engine:cfg.engine,gkey:cfg.gkey,gvoice:cfg.gvoice,gttsModel:cfg.gttsModel,ekey:cfg.ekey,evoice:cfg.ecustom||cfg.evoice,emodel:cfg.emodel,voice:cfg.voice,rate:cfg.rate,pitch:cfg.pitch}}
 let snapOverride=null;
 function engineOf(snap){
   if(snap.engine==="gemini"&&snap.gkey&&Date.now()>geminiCool)return "gemini";
@@ -586,27 +586,35 @@ async function toBuffer(bytes,mime){
   return ab;
 }
 const ttsErr=(m,code)=>Object.assign(new Error(m),{code});
+let geminiVar=null;
 async function ttsGemini(text,snap,signal){
   const models=[...new Set([geminiOk,snap.gttsModel,"gemini-3.8-flash-tts","gemini-3.8-flash-lite-tts","gemini-2.5-flash-preview-tts"].filter(Boolean))];
   const H={"content-type":"application/json","x-goog-api-key":snap.gkey};
+  const style=snap.accent?"Iraqi Arabic, authentic Baghdadi accent and intonation; warm, calm and clear":"warm, calm and clear";
+  const vc={voiceConfig:{prebuiltVoiceConfig:{voiceName:snap.gvoice}}};
+  const variants=[
+    m=>["models/"+m+":generateContent",{contents:[{role:"user",parts:[{text,speechMetadata:{style}}]}],generationConfig:{responseModalities:["AUDIO"],speechConfig:vc}}],
+    m=>["interactions",{model:m,input:[{type:"user_input",content:[{type:"text",text,annotations:[{type:"speech_metadata",style}]}]}],response_format:{type:"audio"},generation_config:{speech_config:[{voice:snap.gvoice}]}}],
+    m=>["models/"+m+":generateContent",{contents:[{role:"user",parts:[{text}]}],generationConfig:{responseModalities:["AUDIO"],speechConfig:vc}}]
+  ];
+  const order=geminiVar!=null?[geminiVar,...[0,1,2].filter(x=>x!==geminiVar)]:[0,1,2];
   let last="";
   for(const m of models){
-    let res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent",{method:"POST",signal,headers:H,
-      body:JSON.stringify({contents:[{role:"user",parts:[{text}]}],generationConfig:{responseModalities:["AUDIO"],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:snap.gvoice}}}}})});
-    if(!res.ok&&(res.status===400||res.status===404)){
-      res=await fetch("https://generativelanguage.googleapis.com/v1beta/interactions",{method:"POST",signal,headers:H,
-        body:JSON.stringify({model:m,input:[{type:"user_input",content:[{type:"text",text,annotations:[{type:"speech_metadata",style:"warm, calm and clear"}]}]}],response_format:{type:"audio"},generation_config:{speech_config:[{voice:snap.gvoice}]}})});
+    for(const vi of order){
+      const [path,body]=variants[vi](m);
+      const res=await fetch("https://generativelanguage.googleapis.com/v1beta/"+path,{method:"POST",signal,headers:H,body:JSON.stringify(body)});
+      if(res.ok){
+        const a=findAudio(await res.json());
+        if(a){geminiOk=m;geminiVar=vi;return toBuffer(b64bytes(a.data),a.mime)}
+        last="no audio";continue;
+      }
+      let b="";try{b=await res.text()}catch(_){}
+      if(res.status===429){geminiCool=Date.now()+60000;throw ttsErr("وصل صوت Gemini للحد المجاني مؤقتاً، استخدمت صوت المتصفح لدقيقة.","429")}
+      if(res.status===401||/API key not valid|API_KEY_INVALID/i.test(b))throw ttsErr("مفتاح Gemini غير صالح للصوت.","key");
+      if(/location is not supported/i.test(b)){geminiCool=Date.now()+3600e3;throw ttsErr("صوت Gemini غير متاح في منطقتك.","region")}
+      last=res.status+" "+b.slice(0,120);
+      if(res.status!==400&&res.status!==404)break;
     }
-    if(res.ok){
-      const a=findAudio(await res.json());
-      if(a){geminiOk=m;return toBuffer(b64bytes(a.data),a.mime)}
-      last="no audio";continue;
-    }
-    let body="";try{body=await res.text()}catch(_){}
-    if(res.status===429){geminiCool=Date.now()+60000;throw ttsErr("وصل صوت Gemini للحد المجاني مؤقتاً، استخدمت صوت المتصفح لدقيقة.","429")}
-    if(res.status===401||/API key not valid|API_KEY_INVALID/i.test(body))throw ttsErr("مفتاح Gemini غير صالح للصوت.","key");
-    if(/location is not supported/i.test(body)){geminiCool=Date.now()+3600e3;throw ttsErr("صوت Gemini غير متاح في منطقتك.","region")}
-    last=res.status+" "+body.slice(0,120);
   }
   throw ttsErr("تعذّر صوت Gemini ("+last+")","fail");
 }
@@ -761,9 +769,25 @@ function finishTurn(){
 /* ---------- Claude ---------- */
 let history=[];try{history=JSON.parse(store.get("history","[]"))||[]}catch(_){history=[]}
 let ctrl=null;
+const PH={
+  greet:()=>cfg.style==="iraqi"?`هلا بيك، آني ${cfg.name}. دا أسمعك هسّه، تفضّل احچي.`:`أهلاً بك، أنا ${cfg.name}. أنا أسمعك الآن، تفضّل بالحديث.`,
+  greetNoKey:()=>cfg.style==="iraqi"?`هلا بيك، آني ${cfg.name}. گبل لا نبدي، حط مفتاح الاتصال بالإعدادات، وبعدين احچي ويايه.`:`أهلاً بك، أنا ${cfg.name}. قبل أن نبدأ، ألصق مفتاح الاتصال في الإعدادات، ثم تحدّث معي مباشرة.`,
+  saved:()=>cfg.style==="iraqi"?"تم الحفظ. تفضّل، دا أسمعك.":"تم الحفظ. تفضّل، أنا أسمعك.",
+  yes:()=>cfg.style==="iraqi"?"هاه عيوني؟":"نعم؟",
+  noKey:()=>cfg.style==="iraqi"?"بعدك ما حاط مفتاح الاتصال. افتح الإعدادات وحطه، وبعدين احچي ويايه.":"لم يتم ضبط مفتاح الاتصال بعد. افتح الإعدادات وألصق المفتاح، ثم تحدث معي.",
+  test:(n,st)=>st==="iraqi"?`هلا، آني ${n}. هذا صوتي، واضح وهادئ، وآني هنا حتى أساعدك.`:`مرحباً، أنا ${n}. هذا هو صوتي، واضح وهادئ، وأنا هنا لأساعدك.`
+};
 const STYLES={
   fusha:"- تحدث بالعربية الفصحى المبسطة الواضحة، وإن تكلم المستخدم باللهجة العراقية فجاره بلطف بلغة قريبة منها.",
-  iraqi:"- تحدث باللهجة العراقية البغدادية الواضحة، بكلمات مألوفة يفهمها الجميع، وتجنب الكلمات الصعبة أو النادرة.",
+  iraqi:`- احچي باللهجة العراقية البغدادية الشعبية الصحيحة، مثل ما يحچي ابن بغداد ويه صديقه بالضبط. لا تحچي فصحى، ولا تخلط ويه لهجة خليجية أو شامية أو مصرية.
+- مفردات لازم تستخدمها بشكل طبيعي: شلونك، شكو ماكو، أكو، ماكو، هواية، كلّش، شويّة، زين، خوش، هسّه، شنو، ليش، وين، منو، شوكت، شگد، باچر، البارحة، يمعود، عيوني، تدلّل، على راسي، لعد، بلكي، يعني، هيچ، هاي، هذا، ذوله، هناك، أريد، ما أدري، أعرف، گاعد، دا (للاستمرار مثل: دا أدوّر)، راح (للمستقبل مثل: راح أسويلك)، سوّي، صار، خلّي، چان، إحنه، همّه، آني، إنت، إنتي.
+- اكتب حرف گ لما ينلفظ مثل g بالعراقي (گال، گلبي، گاعد، أگلك، يگولون، فوگ)، واكتب حرف چ لما ينلفظ مثل ch (چان، هيچ، باچر، شچان، أحچي، چاي)، لأن كلامك ينقرا بصوت.
+- لا تبالغ ولا تسويها نكتة، خليها طبيعية ومحترمة ودافية، وجمل قصيرة سلسة.
+- أمثلة على طريقتك:
+  المستخدم: شلونك؟ ← هلا بيك عيوني، آني زين الحمد لله. إنت شلونك؟ شتحتاج أساعدك بيه؟
+  المستخدم: شنو أحسن وقت أنام؟ ← أحسن شي تنام بين العشرة والحدعش بالليل، وتگعد الصبح بوقت ثابت. هيچ جسمك يرتاح وتصحى نشيط.
+  المستخدم: شكد صار الدولار؟ ← خلّيني أشوفلك هسّه... الدولار اليوم تقريباً بكذا، بس يتغيّر شويّة من مكان لمكان.
+- حتى البطاقات اكتبها بكلام عراقي مختصر وواضح.`,
   formal:"- تحدث بالعربية الفصحى الرسمية الرصينة، بعبارات مهذبة ودقيقة.",
   fun:"- تحدث بأسلوب مرح وخفيف الظل بالفصحى المبسطة، مع لمسة دعابة لطيفة دون مبالغة، وابقَ مفيداً."
 };
@@ -835,7 +859,7 @@ async function handleUser(text){
   stopSpeaking();const id=turnId;
   setState("thinking");setYou(text);setSay("");
   if(!activeKey()){
-    const m="لم يتم ضبط مفتاح الاتصال بعد. افتح الإعدادات وألصق المفتاح، ثم تحدث معي.";
+    const m=PH.noKey();
     setSay(m);streamDone=true;speak(m,id);openPanel();return;
   }
   hideCards();
@@ -1087,8 +1111,7 @@ async function start(){
   if(window.__vclock!=null)return;
   if(!IOS)await initMic();
   const id=turnId;streamDone=true;
-  const g=activeKey()?`أهلاً بك، أنا ${cfg.name}. أنا أسمعك الآن، تفضّل بالحديث.`
-                 :`أهلاً بك، أنا ${cfg.name}. قبل أن نبدأ، ألصق مفتاح الاتصال في الإعدادات، ثم تحدّث معي مباشرة.`;
+  const g=activeKey()?PH.greet():PH.greetNoKey();
   setSay(g);setState("thinking");speak(g,id);
   if(!synth)listen();
   if(!activeKey())openPanel();
@@ -1131,16 +1154,16 @@ $("bSave").onclick=()=>{
   for(const k of ["live","wake","barge","fullIntro"])store.set(k,cfg[k]?"1":"0");store.set("style",cfg.style);awake=false;
   for(const k of ["provider","key","model","gkey","gmodel","engine","gvoice","gttsModel","ekey","evoice","ecustom","emodel","voice","rate","pitch","recLang","name"])store.set(k,String(cfg[k]));
   applyName();closePanel();
-  if(started){stopSpeaking();const id=turnId;streamDone=true;const m="تم الحفظ. تفضّل، أنا أسمعك.";setSay(m);setState("thinking");speak(m,id)}
+  if(started){stopSpeaking();const id=turnId;streamDone=true;const m=PH.saved();setSay(m);setState("thinking");speak(m,id)}
 };
 $("bTest").onclick=()=>{
   ensureAudio();stopRec();stopSpeaking();const id=turnId;streamDone=true;
   const gk=panelProv==="gemini"?cleanKey($("apiKey").value):(cleanKey($("gttsKey").value)||cfg.gkey);
-  snapOverride={vfx:$("vfx").value,engine:$("engine").value,gkey:gk,gvoice:$("gvoice").value,gttsModel:$("gttsModel").value,ekey:cleanKey($("ekey").value),
+  snapOverride={accent:$("style").value==="iraqi",vfx:$("vfx").value,engine:$("engine").value,gkey:gk,gvoice:$("gvoice").value,gttsModel:$("gttsModel").value,ekey:cleanKey($("ekey").value),
     evoice:cleanKey($("ecustom").value)||$("evoice").value,emodel:$("emodel").value,voice:$("voice").value,rate:+$("rate").value,pitch:+$("pitch").value};
   geminiCool=0;
   if(engineOf(snapOverride)!==snapOverride.engine)note(snapOverride.engine==="browser"?"":"ألصق المفتاح أولاً لتجربة الصوت الواقعي، هذا صوت المتصفح.");
-  speak(`مرحباً، أنا ${$("aname").value.trim()||"سراج"}. هذا هو صوتي، واضح وهادئ، وأنا هنا لأساعدك.`,id,true);
+  speak(PH.test($("aname").value.trim()||"سراج",$("style").value),id,true);
   snapOverride=null;
 };
 $("bMem").onclick=()=>{$("memList").hidden=!$("memList").hidden};
