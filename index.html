@@ -264,7 +264,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <label><input type="checkbox" id="barge"> المقاطعة بالصوت</label>
     <div class="hint" id="bargeHint">ابدأ الكلام وهو يتحدث فيتوقف ليسمعك. على الكمبيوتر فقط، والأفضل مع سماعات حتى لا يسمع صوته.</div>
   </div>
-  <div class="fld chk">
+  <div class="fld chk" hidden>
     <label><input type="checkbox" id="fullIntro"> الظهور الكامل في كل مرة</label>
     <div class="hint">بدونه يظهر كاملاً أول مرة في اليوم، ثم بظهور سريع. المس الشاشة أثناء الظهور لتتخطاه.</div>
   </div>
@@ -278,7 +278,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <button class="btn" id="bTest">جرّب الصوت</button>
     <button class="btn" id="bClear">مسح المحادثة</button>
   </div>
-  <div class="ver">الإصدار 2.0</div>
+  <div class="ver">الإصدار 2.1</div>
   <div class="keys">
     <kbd>Space</kbd> تحدّث أو قاطع &nbsp; <kbd>F</kbd> ملء الشاشة &nbsp; <kbd>C</kbd> النص &nbsp; <kbd>Esc</kbd> إغلاق
   </div>
@@ -758,7 +758,7 @@ async function* streamReply(signal){
 async function startIntro(){
   if(reduced||!gl||introDone){introT0=-1;introDone=true;return 0}
   const today=new Date().toDateString();
-  introSpeed=(cfg.fullIntro||store.get("introDay","")!==today)?1:4.5;
+  introSpeed=1;
   if(introSpeed===1)store.set("introDay",today);
   ensureAudio();setSession("playback");
   if(outCtx)await Promise.race([loadIntroSounds(),new Promise(r=>setTimeout(r,2500))]);
@@ -918,12 +918,12 @@ const FRAMED_MSG="أنت تشغّل الصفحة داخل نافذة معاين�
 if(framed){$("veilNote").innerHTML='<span class="warn">'+FRAMED_MSG+'</span>'}
 else if(!SR){$("veilNote").innerHTML='<span class="warn">هذا المتصفح لا يدعم التعرف على الكلام.</span> افتح الصفحة في Google Chrome أو Microsoft Edge.'}
 $("veil").addEventListener("click",start);
-document.addEventListener("click",e=>{if(started&&introRunning()&&!e.target.closest("#panel,#bar"))skipIntro()},true);
+
 addEventListener("pointerdown",()=>{ensureAudio();if(outCtx)loadIntroSounds()},{once:true,capture:true});
 $("stage").addEventListener("click",()=>{
   ensureAudio();
   if(!started)return start();
-  if(introRunning()){skipIntro();return}
+  if(introRunning())return;
   if(state==="speaking"||state==="thinking"){stopSpeaking();listen()}
   else if(state==="listening"){stopRec();setState("idle")}
   else listen();
