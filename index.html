@@ -104,7 +104,39 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
   #hudTxt{font-size:9px;top:calc(62px + env(safe-area-inset-top,0px))}
   #say{font-size:16px;line-height:1.7;max-height:34vh;overflow:hidden}
 }
-@media (prefers-reduced-motion:reduce){#panel{transition:none}}
+/* explainer cards */
+#cards{position:fixed;z-index:6;display:flex;gap:12px;pointer-events:none;--cw:320px}
+#cards.side{flex-direction:column;top:17vh;right:max(24px,env(safe-area-inset-right,0px));max-height:70vh}
+#cards.bottom{position:relative;z-index:auto;flex-direction:row;width:100%;align-self:stretch;padding-bottom:4px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;pointer-events:auto}
+#cards.bottom::-webkit-scrollbar{display:none}
+.card{pointer-events:auto;position:relative;flex:0 0 auto;width:var(--cw);max-width:100%;scroll-snap-align:center;cursor:pointer;
+  background:linear-gradient(155deg,rgba(12,28,46,.84),rgba(4,10,19,.80));border:1px solid rgba(111,214,255,.26);border-radius:3px;
+  padding:13px 16px 15px;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:var(--ink);overflow:hidden;
+  box-shadow:0 12px 40px rgba(0,20,50,.5),inset 0 0 32px rgba(60,160,255,.06)}
+.card::before,.card::after{content:"";position:absolute;width:12px;height:12px;border:1.5px solid var(--cyan);opacity:.9}
+.card::before{top:-1px;right:-1px;border-left:0;border-bottom:0}
+.card::after{bottom:-1px;left:-1px;border-right:0;border-top:0}
+.card .edge{position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent)}
+.card .scan{position:absolute;top:0;bottom:0;left:0;width:45%;background:linear-gradient(90deg,transparent,rgba(160,228,255,.28),transparent);transform:translateX(-130%);pointer-events:none}
+.card .k{display:flex;justify-content:space-between;align-items:center;direction:ltr;font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:9.5px;letter-spacing:.2em;color:var(--cyan);opacity:.85}
+.card .k i{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);animation:blink 1.6s steps(2) infinite}
+.card h3{margin:7px 0 9px;font-family:var(--f-display);font-weight:500;font-size:17px;line-height:1.45;text-wrap:balance}
+.card ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+.card li{position:relative;padding-right:16px;font-size:14px;line-height:1.65;color:var(--ink-dim)}
+.card li::before{content:"";position:absolute;right:2px;top:.72em;width:5px;height:5px;background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+.card .num{margin-top:6px;font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:36px;line-height:1.1;color:#f2fbff;direction:ltr;text-align:right;font-variant-numeric:tabular-nums;text-shadow:0 0 18px rgba(111,214,255,.55)}
+.card .cap{margin-top:6px;font-size:13.5px;line-height:1.6;color:var(--ink-dim)}
+.card.in{animation:cardIn .75s cubic-bezier(.2,.8,.2,1) both}
+.card.in .scan{animation:scan 1s .12s ease-out both}
+.card.in li,.card.in .num,.card.in .cap{animation:lineIn .45s both}
+.card.out{animation:cardOut .5s ease-in both}
+@keyframes cardIn{0%{opacity:0;clip-path:inset(0 0 0 100%);transform:translateX(-16px)}55%{opacity:1}100%{opacity:1;clip-path:inset(0 0 0 0);transform:none}}
+@keyframes scan{to{transform:translateX(330%)}}
+@keyframes lineIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+@keyframes cardOut{0%{opacity:1;transform:none;filter:none;clip-path:inset(0 0 0 0)}14%{transform:translateX(-5px) skewX(-7deg);filter:brightness(1.9)}28%{transform:translateX(6px) skewX(5deg)}42%{transform:none;filter:brightness(1.4);clip-path:inset(0 0 0 0)}100%{opacity:0;filter:brightness(2.4);clip-path:inset(49% 0 49% 0)}}
+@keyframes blink{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){#panel{transition:none}.card.in,.card.out{animation:fadeOnly .3s both}.card.out{animation-direction:reverse}.card.in .scan{display:none}}
+@keyframes fadeOnly{from{opacity:0}to{opacity:1}}
 </style>
 </head>
 <body data-state="sleep" class="">
@@ -128,6 +160,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
   <button class="ib" id="bSet" aria-label="الإعدادات" title="الإعدادات"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 </div>
 
+<div id="cards" class="side" aria-live="polite"></div>
 <div id="hud">
   <div id="you"></div>
   <div id="say"></div>
@@ -297,7 +330,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <button class="btn" id="bTest">جرّب الصوت</button>
     <button class="btn" id="bClear">مسح المحادثة</button>
   </div>
-  <div class="ver">الإصدار 3.3</div>
+  <div class="ver">الإصدار 3.4</div>
   <div class="keys">
     <kbd>Space</kbd> تحدّث أو قاطع &nbsp; <kbd>F</kbd> ملء الشاشة &nbsp; <kbd>C</kbd> النص &nbsp; <kbd>Esc</kbd> إغلاق
   </div>
@@ -744,8 +777,39 @@ ${STYLES[cfg.style]||STYLES.fusha}
 - إذا لم تفهم الكلام لأن التعرف على الصوت أخطأ، اطلب من المستخدم الإعادة بلطف.${cfg.live?`
 - إذا احتاج السؤال معلومات حديثة كالأخبار أو الطقس أو الأسعار أو النتائج، ابحث عنها ثم أجب باختصار، دون قراءة الروابط أو أسماء المواقع الطويلة.`:""}
 - إذا أخبرك المستخدم بمعلومة دائمة ومفيدة عن نفسه، كاسمه أو عمله أو مدينته أو ما يحبه أو أشخاص مهمين له، أو طلب منك أن تتذكر شيئاً، فأضف في آخر ردك سطراً بهذا الشكل بالضبط: [[تذكر: المعلومة باختصار]]. وإذا طلب أن تنسى شيئاً فأضف: [[انس: المعلومة]]. هذه الأسطر لا تُقرأ للمستخدم، فلا تذكرها في كلامك.
+- عندما يكون في جوابك ما يفيد عرضه بصرياً، كخطوات أو نقاط أو أرقام أو مقارنة أو تعريف، أضف في آخر ردك من بطاقة إلى أربع بطاقات تُعرض على الشاشة بجانبك ولا تُقرأ. الصيغ:
+  [[بطاقة: عنوان قصير | نقطة أولى ; نقطة ثانية ; نقطة ثالثة]]
+  [[رقم: القيمة مع وحدتها | وصف قصير لها]]
+  اجعل النقاط قصيرة من كلمتين إلى ثماني كلمات، ولا تزد عن خمس نقاط في البطاقة. كلامك المسموع يشرح، والبطاقات تلخّص، فلا تقرأ محتواها حرفياً. لا تضع بطاقات في التحية أو الدردشة القصيرة.
 تاريخ اليوم: ${d}، والساعة الآن ${tm}.${mem}`;
 }
+const CARD_RE=/\[\[\s*(بطاقة|رقم)\s*:\s*([^\]]+?)\s*\]\]/g;
+let cardSeq=0,shownCards=0;
+function cardBlip(i){if(!outCtx||cfg.cardSound===false)return;try{const ac=outCtx,t=ac.currentTime+i*.18,o=ac.createOscillator(),g=ac.createGain();o.type="sine";o.frequency.setValueAtTime(2300,t);o.frequency.exponentialRampToValueAtTime(1500,t+.06);
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.035,t+.004);g.gain.exponentialRampToValueAtTime(.0001,t+.09);o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+.1)}catch(_){}}
+function showCard(type,body){
+  const box=$("cards");if(box.children.length>=4)return;
+  const el=document.createElement("div");el.className="card";const idx=++cardSeq;
+  const k=document.createElement("div");k.className="k";const lab=document.createElement("span");lab.textContent=(type==="رقم"?"DATA":"INFO")+" // "+String(idx).padStart(2,"0");k.append(lab,document.createElement("i"));
+  const edge=document.createElement("div");edge.className="edge";const scan=document.createElement("div");scan.className="scan";
+  el.append(edge,scan,k);
+  const parts=body.split("|");
+  if(type==="رقم"){
+    const n=document.createElement("div");n.className="num";n.textContent=(parts[0]||"").trim();n.style.animationDelay=".35s";
+    const c=document.createElement("div");c.className="cap";c.textContent=(parts.slice(1).join("|")||"").trim();c.style.animationDelay=".5s";
+    el.append(n);if(c.textContent)el.append(c);
+  }else{
+    const h=document.createElement("h3");h.textContent=(parts[0]||"").trim();el.append(h);
+    const items=(parts.slice(1).join("|")||"").split(/[;؛•]+/).map(x=>x.trim()).filter(Boolean).slice(0,5);
+    if(items.length){const ul=document.createElement("ul");items.forEach((t,i)=>{const li=document.createElement("li");li.textContent=t;li.style.animationDelay=(.35+i*.14)+"s";ul.append(li)});el.append(ul)}
+  }
+  el.style.animationDelay=(shownCards*.18)+"s";
+  el.onclick=()=>hideCard(el);
+  box.append(el);void el.offsetWidth;el.classList.add("in");cardBlip(shownCards);shownCards++;
+}
+function hideCard(el){if(!el||el.classList.contains("out"))return;el.classList.remove("in");el.style.animationDelay="0s";el.classList.add("out");setTimeout(()=>el.remove(),reduced?320:520)}
+function hideCards(){const cs=[...$("cards").children];cs.forEach((c,i)=>setTimeout(()=>hideCard(c),i*90));shownCards=0}
+function feedCards(raw,state){CARD_RE.lastIndex=0;let m,n=0;while((m=CARD_RE.exec(raw))){n++;if(n>state.done){state.done=n;showCard(m[1],m[2])}}}
 const TAG_RE=/\[\[\s*(تذكر|تذكّر|انس|انسَ)\s*:\s*([^\]]+?)\s*\]\]/g;
 function visibleText(raw){return raw.replace(/\[\[[\s\S]*?\]\]/g,"").replace(/\[\[[\s\S]*$/,"").replace(/\[$/,"")}
 function applyMemoryTags(raw){
@@ -765,9 +829,10 @@ async function handleUser(text){
     const m="لم يتم ضبط مفتاح الاتصال بعد. افتح الإعدادات وألصق المفتاح، ثم تحدث معي.";
     setSay(m);streamDone=true;speak(m,id);openPanel();return;
   }
+  hideCards();
   history.push({role:"user",content:text});history=history.slice(-24);
   while(history.length&&history[0].role!=="user")history.shift();
-  streamDone=false;let full="",pend="",vis=0;
+  streamDone=false;let full="",pend="",vis=0;const cardState={done:0};
   const flush=force=>{
     let m;
     while((m=pend.match(/^([\s\S]*?[\.!\?؟…\n]+)(\s+|$)/))&&m[1].trim().length>1){
@@ -781,7 +846,7 @@ async function handleUser(text){
   try{
     for await (const piece of streamReply(ctrl.signal)){
       if(id!==turnId)return;
-      full+=piece;const v=visibleText(full);if(v.length>vis){pend+=v.slice(vis);vis=v.length}setSay(clean(v));flush(false);
+      full+=piece;feedCards(full,cardState);const v=visibleText(full);if(v.length>vis){pend+=v.slice(vis);vis=v.length}setSay(clean(v));flush(false);
     }
     flush(true);speak("",id,true);
     applyMemoryTags(full);
@@ -1071,7 +1136,7 @@ $("bTest").onclick=()=>{
 };
 $("bMem").onclick=()=>{$("memList").hidden=!$("memList").hidden};
 $("bMemClear").onclick=()=>{memory=[];store.set("memory","[]");showMem()};
-$("bClear").onclick=()=>{history=[];store.set("history","[]");$("you").textContent="";$("say").textContent=""};
+$("bClear").onclick=()=>{hideCards();history=[];store.set("history","[]");$("you").textContent="";$("say").textContent=""};
 document.addEventListener("keydown",e=>{
   if(e.target.closest&&e.target.closest("input,select,textarea"))return;
   if(e.key==="Escape"){closePanel();return}
@@ -1100,6 +1165,9 @@ function layoutStage(){
   }
   st.style.height=S+"px";st.style.width=S*.75+"px";
   st.style.left=(Wv-S*.75)/2+"px";st.style.top=top+"px";
+  const cb=$("cards"),free=(Wv-S*.75)/2;
+  if(free>=250){cb.className="side";cb.style.setProperty("--cw",Math.min(340,free-40)+"px");if(cb.parentNode!==document.body)document.body.insertBefore(cb,$("hud"))}
+  else{cb.className="bottom";cb.style.setProperty("--cw",Math.min(320,Wv*.78)+"px");const hud=$("hud");if(cb.parentNode!==hud)hud.insertBefore(cb,hud.firstChild)}
 }
 function resize(){
   layoutStage();
@@ -1747,6 +1815,7 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 if("serviceWorker" in navigator&&location.protocol==="https:"){addEventListener("load",()=>{navigator.serviceWorker.register("sw.js").catch(()=>{})})}
+window.__cards={show:showCard,hide:hideCards};
 window.__siraj={dbg:()=>({snd:!!sndBufs,introT0,ctx:outCtx&&outCtx.state,mouth:+mouth.toFixed(3),state,playing:!!curSrc}),say:t=>handleUser(t),state:s=>setState(s),renderWav:async()=>{const SRr=44100,oc=new OfflineAudioContext(2,SRr*11,SRr);const prev=outCtx;outCtx=oc;introSound();outCtx=prev;const b=await oc.startRendering();
     const L=b.length,l=b.getChannelData(0),r=b.getChannelData(1),buf=new ArrayBuffer(44+L*4),v=new DataView(buf);
     const ws=(o,t)=>{for(let i=0;i<t.length;i++)v.setUint8(o+i,t.charCodeAt(i))};ws(0,"RIFF");v.setUint32(4,36+L*4,true);ws(8,"WAVE");ws(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,2,true);v.setUint32(24,SRr,true);v.setUint32(28,SRr*4,true);v.setUint16(32,4,true);v.setUint16(34,16,true);ws(36,"data");v.setUint32(40,L*4,true);
