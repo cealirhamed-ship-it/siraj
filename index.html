@@ -369,7 +369,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <button class="btn" id="bClear">مسح المحادثة</button>
     <button class="btn" id="bCard" type="button">عرض بطاقة تجريبية</button>
   </div>
-  <div class="ver">الإصدار 4.2</div>
+  <div class="ver">الإصدار 4.3</div>
   <div class="keys">
     <kbd>Space</kbd> تحدّث أو قاطع &nbsp; <kbd>F</kbd> ملء الشاشة &nbsp; <kbd>C</kbd> النص &nbsp; <kbd>Esc</kbd> إغلاق
   </div>
@@ -485,7 +485,8 @@ if(synth){loadVoices();synth.onvoiceschanged=loadVoices}
 /* ---------- state & UI ---------- */
 let state="sleep";
 const STATUS={sleep:"في انتظارك",idle:"اضغط أو قل شيئاً",listening:"يستمع إليك…",thinking:"يفكّر…",speaking:"يتحدث…",music:"يشغّل موسيقى ♪  المس الشخصية للإيقاف"};
-function setState(s){state=s;document.body.dataset.state=s;lastActive=performance.now();
+let thinkStart=0;
+function setState(s){if(s==="thinking"&&state!=="thinking")thinkStart=performance.now();state=s;document.body.dataset.state=s;lastActive=performance.now();
   $("statusText").textContent=(s==="listening"&&typeof waitingForName==="function"&&waitingForName())?`قل «يا ${cfg.name}»…`:(STATUS[s]||"")}
 let sayFade=0;
 function setSay(t){$("say").textContent=t;$("say").style.opacity=1;clearTimeout(sayFade)}
@@ -694,7 +695,8 @@ function speak(text,id,final=true){
 function enqueue(item){
   if(item.eng!=="browser"){
     const sig=ttsAbort.signal;
-    item.audio=(item.eng==="gemini"?ttsGemini:ttsEleven)(item.t,item.snap,sig);
+    item.audio=Promise.race([(item.eng==="gemini"?ttsGemini:ttsEleven)(item.t,item.snap,sig),
+      new Promise((_,rej)=>setTimeout(()=>rej(ttsErr("تأخر تجهيز الصوت، أكملت بصوت المتصفح.","timeout")),15000))]);
     item.audio.catch(()=>{});
   }
   queue.push(item);if(!speaking)speakNext();
@@ -938,7 +940,8 @@ async function handleUser(text){
     if(pend.length>200){const c=Math.max(pend.lastIndexOf("،",200),pend.lastIndexOf(" ",200));if(c>40){speak(pend.slice(0,c+1),id,false);pend=pend.slice(c+1)}}
     if(force&&pend.trim()){speak(pend,id,false);pend=""}
   };
-  ctrl=new AbortController();
+  ctrl=new AbortController();let timedOut=false;
+  const wd=setTimeout(()=>{if(id===turnId&&!full&&ctrl){timedOut=true;ctrl.abort()}},25000);
   try{
     for await (const piece of streamReply(ctrl.signal)){
       if(id!==turnId)return;
@@ -950,17 +953,18 @@ async function handleUser(text){
     const said=visibleText(full).trim();
     if(said){history.push({role:"assistant",content:said});store.set("history",JSON.stringify(history.slice(-40)))}
   }catch(err){
-    if(err.name==="AbortError")return;
-    const m=err.spoken?err.message:"تعذّر الوصول إلى الإنترنت أو إلى الخدمة. تأكد من الاتصال ثم حاول مرة أخرى.";
+    if(err.name==="AbortError"&&!timedOut)return;
+    const m=timedOut?(cfg.style==="iraqi"?"الرد تأخر هواية. جرّب مرة ثانية، أو بدّل النموذج من الإعدادات.":"تأخر الرد كثيراً. حاول مرة أخرى، أو غيّر النموذج من الإعدادات."):err.spoken?err.message:"تعذّر الوصول إلى الإنترنت أو إلى الخدمة. تأكد من الاتصال ثم حاول مرة أخرى.";
     if(history.length&&history[history.length-1].role==="user")history.pop();
     setSay(m+(lastDetail?"\n["+lastDetail+"]":""));lastDetail="";speak(m,id);
   }finally{
+    clearTimeout(wd);
     if(id===turnId){streamDone=true;ctrl=null;if(!speaking&&!queue.length)finishTurn()}
   }
 }
 
 /* ---------- providers ---------- */
-let lastDetail="",noLiveG=false,noLiveC=false,gModelOk=null;
+let lastDetail="",noLiveG=false,noLiveC=false,gModelOk=null,noThink=false;
 const spoken=m=>Object.assign(new Error(m),{spoken:true});
 async function* sseLines(res){
   const reader=res.body.getReader(),dec=new TextDecoder();let buf="";
@@ -979,10 +983,13 @@ async function* streamReply(signal){
     const contents=history.map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]}));
     const chain=[...new Set([gModelOk||cfg.gmodel,cfg.gmodel,"gemini-3.8-flash","gemini-2.5-flash","gemini-2.5-flash-lite"])];
     let mi=0;
-    const req=withTools=>fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(chain[mi])+":streamGenerateContent?alt=sse",{method:"POST",signal,
+    const think=m=>noThink?null:/gemini-3/.test(m)?{thinkingLevel:"low"}:/2\.5-pro/.test(m)?{thinkingBudget:512}:/2\.5-flash/.test(m)?{thinkingBudget:256}:null;
+    const req=withTools=>{const gc={maxOutputTokens:2048,temperature:0.8},th=think(chain[mi]);if(th)gc.thinkingConfig=th;
+      return fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(chain[mi])+":streamGenerateContent?alt=sse",{method:"POST",signal,
       headers:{"content-type":"application/json","x-goog-api-key":cfg.gkey},
-      body:JSON.stringify(Object.assign({systemInstruction:{parts:[{text:systemPrompt()}]},contents,generationConfig:{maxOutputTokens:2048,temperature:0.8}},withTools?{tools:[{google_search:{}}]}:{}))});
+      body:JSON.stringify(Object.assign({systemInstruction:{parts:[{text:systemPrompt()}]},contents,generationConfig:gc},withTools?{tools:[{google_search:{}}]}:{}))})};
     let res=await req(cfg.live&&!noLiveG);
+    if(!res.ok&&res.status===400&&!noThink){let b="";try{b=await res.clone().text()}catch(_){}if(/think/i.test(b)){noThink=true;res=await req(cfg.live&&!noLiveG)}}
     if(!res.ok&&cfg.live&&!noLiveG&&(res.status===400||res.status===429||res.status===403)){noLiveG=true;res=await req(false)}
     while(!res.ok&&(res.status===404||res.status===400)&&mi<chain.length-1){
       let b="";try{b=await res.clone().text()}catch(_){}
@@ -1884,6 +1891,7 @@ function frame(now){
   if(micLevel>.25)lastActive=now;
   if(cfg.barge&&!IOS&&state==="speaking"&&analyser){bargeT=rawMic>.45?bargeT+dt:Math.max(0,bargeT-dt*2);if(bargeT>.28){bargeT=0;awake=true;stopSpeaking();listen()}}else bargeT=0;
   pulse*=Math.pow(.02,dt);
+  if(state==="thinking"&&(fcount++&15)===0){const sec=Math.floor((now-thinkStart)/1000),base=(streamDone&&speaking)?"يجهّز الصوت…":"يفكّر…";$("statusText").textContent=base+(sec>=2?"  "+sec+"ث":"")}
   const it=window.__introAt!=null?window.__introAt:(introT0<0?(introDone?99:0):(t-introT0)*introSpeed);
   introK=introT0<0&&introDone?Math.min(1,introK+dt):Math.min(1,Math.max(0,(it-IMPACT)/1.2));
   const glowK=introT0<0&&introDone?1:Math.min(1,Math.max(0,(it-2.4)/4.6))*.7+.3*Math.min(1,Math.max(0,(it-IMPACT)/.6));
