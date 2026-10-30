@@ -331,7 +331,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <button class="btn" id="bClear">مسح المحادثة</button>
     <button class="btn" id="bCard" type="button">عرض بطاقة تجريبية</button>
   </div>
-  <div class="ver">الإصدار 3.5</div>
+  <div class="ver">الإصدار 3.6</div>
   <div class="keys">
     <kbd>Space</kbd> تحدّث أو قاطع &nbsp; <kbd>F</kbd> ملء الشاشة &nbsp; <kbd>C</kbd> النص &nbsp; <kbd>Esc</kbd> إغلاق
   </div>
@@ -751,7 +751,9 @@ function stopSpeaking(){
   ttsAbort.abort();ttsAbort=new AbortController();
   if(ctrl){ctrl.abort();ctrl=null}
 }
+let cardHideT=0;
 function finishTurn(){
+  clearTimeout(cardHideT);if($("cards").children.length)cardHideT=setTimeout(hideCards,3500);
   followUntil=Date.now()+10000;
   if(state==="speaking"||state==="thinking"){fadeSay(6000);if(started)setTimeout(()=>{if(!speaking&&streamDone)listen()},450);else setState("idle")}
 }
@@ -815,7 +817,7 @@ function showCard(type,body){
   box.append(el);void el.offsetWidth;el.classList.add("in");cardBlip(shownCards);shownCards++;
 }
 function hideCard(el){if(!el||el.classList.contains("out"))return;el.classList.remove("in");el.style.animationDelay="0s";el.classList.add("out");setTimeout(()=>el.remove(),reduced?320:520)}
-function hideCards(){const cs=[...$("cards").children];cs.forEach((c,i)=>setTimeout(()=>hideCard(c),i*90));shownCards=0}
+function hideCards(){clearTimeout(cardHideT);const cs=[...$("cards").children];cs.forEach((c,i)=>setTimeout(()=>hideCard(c),i*90));shownCards=0}
 function feedCards(raw,state){CARD_RE.lastIndex=0;let m,n=0;while((m=CARD_RE.exec(raw))){n++;if(n>state.done){state.done=n;showCard(m[1],m[2])}}}
 const TAG_RE=/\[\[\s*(تذكر|تذكّر|انس|انسَ)\s*:\s*([^\]]+?)\s*\]\]/g;
 function visibleText(raw){return raw.replace(/\[\[[\s\S]*?\]\]/g,"").replace(/\[\[[\s\S]*$/,"").replace(/\[$/,"")}
@@ -1143,7 +1145,7 @@ $("bTest").onclick=()=>{
 };
 $("bMem").onclick=()=>{$("memList").hidden=!$("memList").hidden};
 $("bMemClear").onclick=()=>{memory=[];store.set("memory","[]");showMem()};
-$("bCard").onclick=()=>{closePanel();hideCards();setTimeout(()=>{showCard("رقم","3.5 | رقم الإصدار الذي تستخدمه");showCard("بطاقة","البطاقات تعمل | تظهر بجانب سراج أثناء الشرح ; المسها لتختفي ; تختفي تلقائياً مع سؤالك التالي")},400)};
+$("bCard").onclick=()=>{closePanel();hideCards();setTimeout(()=>{showCard("رقم","3.5 | رقم الإصدار الذي تستخدمه");showCard("بطاقة","البطاقات تعمل | تظهر بجانب سراج أثناء الشرح ; تختفي بعد انتهاء الشرح ; المسها لتختفي فوراً");cardHideT=setTimeout(hideCards,7000)},400)};
 $("bClear").onclick=()=>{hideCards();history=[];store.set("history","[]");$("you").textContent="";$("say").textContent=""};
 document.addEventListener("keydown",e=>{
   if(e.target.closest&&e.target.closest("input,select,textarea"))return;
