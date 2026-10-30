@@ -253,12 +253,15 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <div class="fld">
       <label for="ecustom">أو معرّف صوت من المكتبة (اختياري)</label>
       <input id="ecustom" type="text" placeholder="Voice ID" autocomplete="off" dir="ltr">
-      <div class="hint">يمكنك اختيار صوت عربي رجالي من Voice Library ونسخ معرّفه هنا.</div>
+      <div class="hint">للهجة عراقية حقيقية: من Voice Library اختر Arabic ثم ابحث عن Iraqi، وأضف صوتاً رجالياً إلى My Voices، وانسخ Voice ID هنا.</div>
     </div>
     <div class="fld">
       <label for="emodel">نموذج ElevenLabs</label>
       <select id="emodel">
-        <option value="eleven_multilingual_v2">Multilingual v2 — أوضح نطق عربي</option>
+        <option value="eleven_v4">Eleven v4 — الأحدث وأفضل للهجات</option>
+        <option value="eleven_v4_turbo">Eleven v4 Turbo — سريع جداً</option>
+        <option value="eleven_v3">Eleven v3 — معبّر</option>
+        <option value="eleven_multilingual_v2">Multilingual v2 — مستقر</option>
         <option value="eleven_flash_v2_5">Flash v2.5 — أسرع وأرخص</option>
       </select>
     </div>
@@ -331,7 +334,7 @@ kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0
     <button class="btn" id="bClear">مسح المحادثة</button>
     <button class="btn" id="bCard" type="button">عرض بطاقة تجريبية</button>
   </div>
-  <div class="ver">الإصدار 3.7</div>
+  <div class="ver">الإصدار 3.8</div>
   <div class="keys">
     <kbd>Space</kbd> تحدّث أو قاطع &nbsp; <kbd>F</kbd> ملء الشاشة &nbsp; <kbd>C</kbd> النص &nbsp; <kbd>Esc</kbd> إغلاق
   </div>
@@ -371,7 +374,7 @@ const cfg={
   ekey:store.get("ekey",""),
   evoice:store.get("evoice","nPczCjzI2devNBz1zQrb"),
   ecustom:store.get("ecustom",""),
-  emodel:store.get("emodel","eleven_multilingual_v2")
+  emodel:(()=>{if(store.get("emodelV4","")!=="1"){store.set("emodelV4","1");store.set("emodel","eleven_v4")}return store.get("emodel","eleven_v4")})()
 };
 const GVOICES=[["Charon","Charon — رجل رصين وواضح"],["Algieba","Algieba — رجل ناعم وشجي"],["Iapetus","Iapetus — رجل واضح النطق"],["Enceladus","Enceladus — رجل دافئ هامس"],["Algenib","Algenib — رجل عميق خشن"],["Orus","Orus — رجل حازم"],["Alnilam","Alnilam — رجل ثابت"],["Schedar","Schedar — رجل متزن"],["Sadaltager","Sadaltager — رجل خبير"],["Rasalgethi","Rasalgethi — رجل إذاعي"],["Umbriel","Umbriel — رجل مريح"],["Achird","Achird — رجل ودود"],["Puck","Puck — رجل حيوي"],["Fenrir","Fenrir — رجل متحمس"]];
 const EVOICES=[["nPczCjzI2devNBz1zQrb","Brian — عميق ورخيم"],["JBFqnCBsd6RMkjVDRZzb","George — دافئ وراوٍ"],["onwK4e9ZLuTAKqWW03F9","Daniel — رسمي وعميق"],["pNInz6obpgDQGcFmaJgB","Adam — واضح ومتزن"],["pqHfZKP75CvOlQylNhV4","Bill — ناضج وهادئ"],["cjVigY5qzO86Huf0OWal","Eric — ناعم وودود"],["iP95p4xoKVk53GoZ742B","Chris — طبيعي وعفوي"],["TX3LPaxmHKxFdv7VOQHJ","Liam — شاب وواضح"]];
@@ -618,16 +621,23 @@ async function ttsGemini(text,snap,signal){
   }
   throw ttsErr("تعذّر صوت Gemini ("+last+")","fail");
 }
+let elevenFallback=null;
 async function ttsEleven(text,snap,signal){
-  const res=await fetch("https://api.elevenlabs.io/v1/text-to-speech/"+encodeURIComponent(snap.evoice)+"?output_format=mp3_44100_128",{method:"POST",signal,
+  const call=model=>fetch("https://api.elevenlabs.io/v1/text-to-speech/"+encodeURIComponent(snap.evoice)+"?output_format=mp3_44100_128",{method:"POST",signal,
     headers:{"content-type":"application/json","accept":"audio/mpeg","xi-api-key":snap.ekey},
-    body:JSON.stringify({text,model_id:snap.emodel,language_code:snap.emodel==="eleven_flash_v2_5"?"ar":undefined,voice_settings:{stability:0.5,similarity_boost:0.8,style:0.15,use_speaker_boost:true}})});
+    body:JSON.stringify({text,model_id:model,language_code:model==="eleven_flash_v2_5"?"ar":undefined,voice_settings:{stability:0.5,similarity_boost:0.8,style:0.15,use_speaker_boost:true}})});
+  let model=elevenFallback&&elevenFallback.from===snap.emodel?elevenFallback.to:snap.emodel;
+  let res=await call(model);
+  if(!res.ok&&(res.status===400||res.status===404||res.status===422)&&model!=="eleven_multilingual_v2"){
+    let b="";try{b=await res.clone().text()}catch(_){}
+    if(/model/i.test(b)&&!/voice_not_found/i.test(b)){elevenFallback={from:snap.emodel,to:"eleven_multilingual_v2"};model="eleven_multilingual_v2";res=await call(model);note("نموذج ElevenLabs المختار غير متاح لحسابك، استخدمت Multilingual v2.")}
+  }
   if(!res.ok){
     let body="";try{body=await res.text()}catch(_){}
     if(res.status===401)throw ttsErr(/quota|credits/i.test(body)?"انتهى رصيد ElevenLabs لهذا الشهر.":"مفتاح ElevenLabs غير صحيح.","key");
     if(/quota|credits/i.test(body))throw ttsErr("انتهى رصيد ElevenLabs لهذا الشهر.","quota");
     if(res.status===404||/voice_not_found/i.test(body))throw ttsErr("معرّف صوت ElevenLabs غير موجود.","voice");
-    if(res.status===402||/payment|paid_plan|library/i.test(body))throw ttsErr("هذا الصوت يحتاج خطة مدفوعة في ElevenLabs، اختر صوتاً من القائمة.","plan");
+    if(res.status===402||/payment|paid_plan|library|free users/i.test(body))throw ttsErr("هذا الصوت يحتاج خطة مدفوعة في ElevenLabs، اختر صوتاً آخر.","plan");
     if(res.status===429)throw ttsErr("ElevenLabs مشغول، استخدمت صوت المتصفح مؤقتاً.","429");
     throw ttsErr("تعذّر صوت ElevenLabs ("+res.status+")","fail");
   }
