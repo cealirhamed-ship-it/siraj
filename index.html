@@ -97,7 +97,7 @@ input[type=range]{width:100%;accent-color:var(--cyan)}
 .keys{font-size:12px;color:var(--ink-faint);line-height:1.9;border-top:1px solid var(--line);padding-top:12px}
 kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--ink-dim)}
 @media (max-width:600px) and (orientation:portrait){
-  #hudTxt{left:auto;right:2%;top:-4%;font-size:9px}
+  #hudTxt{left:auto;right:3%;top:.5%;font-size:9px}
   #stageWrap{place-items:start center;padding-top:calc(64px + env(safe-area-inset-top,0px));padding-bottom:0}
   #stage{height:min(66vh,125vw)}
   #say{font-size:16px;line-height:1.7;max-height:34vh;overflow:hidden}
@@ -663,66 +663,84 @@ function startIntro(){
   ensureAudio();setSession("playback");
   let lead=.06;
   try{if(outCtx)lead=introSound()}catch(e){console.warn(e)}
-  introT0=performance.now()/1000+lead;
+  introT0=clk()+lead;
   return (INTRO_END+lead)*1000;
 }
 function introSound(){
   const ac=outCtx;if(ac.state!=="running"&&!(window.OfflineAudioContext&&ac instanceof OfflineAudioContext))ac.resume();
-  const t0=ac.currentTime+.06,SR=ac.sampleRate;
-  const out=ac.createGain();out.gain.value=.85;
-  const comp=ac.createDynamicsCompressor();comp.threshold.value=-10;comp.knee.value=12;comp.ratio.value=4;comp.attack.value=.004;comp.release.value=.25;
+  const t0=ac.currentTime+.08,SR=ac.sampleRate,ti=t0+IMPACT;
+  const out=ac.createGain();out.gain.value=.8;
+  const comp=ac.createDynamicsCompressor();comp.threshold.value=-12;comp.knee.value=10;comp.ratio.value=3;comp.attack.value=.003;comp.release.value=.3;
   out.connect(comp);comp.connect(ac.destination);
-  const rv=ac.createConvolver(),L=Math.floor(SR*3.4),ir=ac.createBuffer(2,L,SR);
-  for(let ch=0;ch<2;ch++){const d=ir.getChannelData(ch);for(let i=0;i<L;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/L,2.8)}
-  rv.buffer=ir;const rvo=ac.createGain();rvo.gain.value=.5;rv.connect(rvo);rvo.connect(out);
-  const nb=ac.createBuffer(1,SR*2,SR);{const d=nb.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1}
+  // long, dark stereo hall
+  const rv=ac.createConvolver(),L=Math.floor(SR*5.5),ir=ac.createBuffer(2,L,SR);
+  for(let ch=0;ch<2;ch++){const d=ir.getChannelData(ch);let lp=0;for(let i=0;i<L;i++){const x=Math.random()*2-1;lp+=(x-lp)*(.18+.6*Math.pow(1-i/L,2));d[i]=lp*Math.pow(1-i/L,3.2)*(i<SR*.012?i/(SR*.012):1)}}
+  rv.buffer=ir;const wet=ac.createGain();wet.gain.value=.62;rv.connect(wet);wet.connect(out);
+  const bus=(dry,send,pan)=>{const g=ac.createGain();let n=g;if(pan!=null&&ac.createStereoPanner){const p=ac.createStereoPanner();p.pan.value=pan;g.connect(p);n=p}
+    const d=ac.createGain();d.gain.value=dry;n.connect(d);d.connect(out);if(send){const w=ac.createGain();w.gain.value=send;n.connect(w);w.connect(rv)}return g};
+  const nb=ac.createBuffer(2,SR*3,SR);for(let ch=0;ch<2;ch++){const d=nb.getChannelData(ch);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1}
   const noise=()=>{const n=ac.createBufferSource();n.buffer=nb;n.loop=true;return n};
-  const route=(node,dry,wet,pan)=>{let last=node;if(pan!=null&&ac.createStereoPanner){const p=ac.createStereoPanner();p.pan.value=pan;node.connect(p);last=p}
-    const g=ac.createGain();g.gain.value=dry;last.connect(g);g.connect(out);if(wet){const w=ac.createGain();w.gain.value=wet;last.connect(w);w.connect(rv)}return last};
-  const env=(g,pts)=>{g.gain.setValueAtTime(0,t0);for(const [t,v,lin] of pts){lin?g.gain.linearRampToValueAtTime(v,t0+t):g.gain.exponentialRampToValueAtTime(Math.max(v,1e-4),t0+t)}};
-  // 1. ignition spark
-  {const o=ac.createOscillator();o.type="sine";o.frequency.setValueAtTime(2400,t0);o.frequency.exponentialRampToValueAtTime(520,t0+.35);
-   const g=ac.createGain();env(g,[[.008,.22,1],[.9,.0001]]);o.connect(g);route(g,1,.8,0);o.start(t0);o.stop(t0+1);
-   const n=noise(),hp=ac.createBiquadFilter();hp.type="highpass";hp.frequency.value=3000;const g2=ac.createGain();env(g2,[[.004,.35,1],[.06,.0001]]);n.connect(hp);hp.connect(g2);route(g2,1,.4,0);n.start(t0);n.stop(t0+.1)}
-  // 2. particle stream whoosh (pans left to right like the ribbon)
-  {const n=noise(),bp=ac.createBiquadFilter();bp.type="bandpass";bp.Q.value=1.1;
-   bp.frequency.setValueAtTime(380,t0+.3);bp.frequency.exponentialRampToValueAtTime(2600,t0+2.6);bp.frequency.exponentialRampToValueAtTime(700,t0+3.9);
-   const g=ac.createGain();env(g,[[.3,0,1],[1.1,.3,1],[2.5,.42,1],[3.4,.12,1],[3.9,0,1]]);
-   n.connect(bp);bp.connect(g);let p=g;
-   if(ac.createStereoPanner){p=ac.createStereoPanner();p.pan.setValueAtTime(-.6,t0+.3);p.pan.linearRampToValueAtTime(.1,t0+1.6);p.pan.linearRampToValueAtTime(.65,t0+3.6);g.connect(p)}
-   route(p,1,.5);n.start(t0+.3);n.stop(t0+4.2)}
-  // 3. rising drone
-  {const f=ac.createBiquadFilter();f.type="lowpass";f.Q.value=6;f.frequency.setValueAtTime(160,t0+.2);f.frequency.exponentialRampToValueAtTime(2200,t0+4.3);
-   const g=ac.createGain();env(g,[[.2,0,1],[2.,.07,1],[4.2,.11,1],[4.5,.0001]]);f.connect(g);route(g,1,.35,0);
-   for(const [fr,dt,ty] of [[55,0,"sawtooth"],[55.4,7,"sawtooth"],[110,-5,"square"]]){const o=ac.createOscillator();o.type=ty;o.frequency.setValueAtTime(fr,t0);o.frequency.exponentialRampToValueAtTime(fr*1.5,t0+4.5);o.detune.value=dt;o.connect(f);o.start(t0+.2);o.stop(t0+4.6)}}
-  // 4. glittering sparkles riding the stream
-  for(let i=0;i<90;i++){const st=t0+.4+Math.pow(Math.random(),.8)*3.4,o=ac.createOscillator();o.type="sine";o.frequency.value=2200+Math.random()*5200;
-   const g=ac.createGain();g.gain.setValueAtTime(0,st);g.gain.linearRampToValueAtTime(.03+Math.random()*.05,st+.006);g.gain.exponentialRampToValueAtTime(1e-4,st+.08+Math.random()*.14);
-   o.connect(g);route(g,1,.9,(Math.random()*2-1)*.8);o.start(st);o.stop(st+.3)}
-  // 5. reverse swell into the hit
-  {const n=noise(),hp=ac.createBiquadFilter();hp.type="highpass";hp.frequency.setValueAtTime(800,t0+3.9);hp.frequency.exponentialRampToValueAtTime(5000,t0+4.58);
-   const g=ac.createGain();g.gain.setValueAtTime(1e-4,t0+3.9);g.gain.exponentialRampToValueAtTime(.42,t0+4.58);g.gain.linearRampToValueAtTime(0,t0+4.61);
-   n.connect(hp);hp.connect(g);route(g,1,.3,0);n.start(t0+3.9);n.stop(t0+4.7)}
-  // 6. the impact
-  const ti=t0+IMPACT;
-  {const o=ac.createOscillator();o.type="sine";o.frequency.setValueAtTime(78,ti);o.frequency.exponentialRampToValueAtTime(28,ti+1.4);
-   const g=ac.createGain();g.gain.setValueAtTime(0,ti);g.gain.linearRampToValueAtTime(1,ti+.008);g.gain.exponentialRampToValueAtTime(1e-4,ti+3.2);o.connect(g);route(g,1,.25,0);o.start(ti);o.stop(ti+3.3)}
-  {const o=ac.createOscillator();o.type="triangle";o.frequency.setValueAtTime(190,ti);o.frequency.exponentialRampToValueAtTime(55,ti+.28);
-   const g=ac.createGain();g.gain.setValueAtTime(0,ti);g.gain.linearRampToValueAtTime(.55,ti+.004);g.gain.exponentialRampToValueAtTime(1e-4,ti+.7);o.connect(g);route(g,1,.5,0);o.start(ti);o.stop(ti+.8)}
-  {const n=noise(),lp=ac.createBiquadFilter();lp.type="lowpass";lp.frequency.setValueAtTime(5200,ti);lp.frequency.exponentialRampToValueAtTime(180,ti+1.3);
-   const g=ac.createGain();g.gain.setValueAtTime(0,ti);g.gain.linearRampToValueAtTime(.6,ti+.004);g.gain.exponentialRampToValueAtTime(1e-4,ti+1.6);n.connect(lp);lp.connect(g);route(g,1,1,0);n.start(ti);n.stop(ti+1.7)}
-  for(const [fr,v,pn] of [[220,.07,-.3],[329.6,.06,.3],[440,.055,-.15],[659.3,.04,.2],[880,.03,0],[1318.5,.018,.4]]){
-   const o=ac.createOscillator();o.type="sine";o.frequency.value=fr;const g=ac.createGain();g.gain.setValueAtTime(0,ti);g.gain.linearRampToValueAtTime(v,ti+.02);g.gain.exponentialRampToValueAtTime(1e-4,ti+4.2);
-   o.connect(g);route(g,1,.9,pn);o.start(ti);o.stop(ti+4.3)}
-  // 7. settling pad
-  {const g=ac.createGain();g.gain.setValueAtTime(0,ti+.2);g.gain.linearRampToValueAtTime(.06,ti+1.2);g.gain.exponentialRampToValueAtTime(1e-4,ti+5.5);route(g,1,.6,0);
-   for(const fr of [55,82.4,110.2]){const o=ac.createOscillator();o.type="sine";o.frequency.value=fr;o.connect(g);o.start(ti+.2);o.stop(ti+5.6)}}
-  return t0-ac.currentTime+.0;
+  const curve=k=>{const c=new Float32Array(2048);for(let i=0;i<2048;i++){const x=i/1023.5-1;c[i]=Math.tanh(k*x)/Math.tanh(k)}return c};
+  const hz=m=>440*Math.pow(2,(m-69)/12);
+  // A. warm chord bed (D minor add9), opens slowly, ducks right before the hit
+  {const lp=ac.createBiquadFilter();lp.type="lowpass";lp.Q.value=.8;lp.frequency.setValueAtTime(380,t0);lp.frequency.exponentialRampToValueAtTime(1500,ti-.1);lp.frequency.setValueAtTime(700,ti);lp.frequency.exponentialRampToValueAtTime(2600,ti+1.2);lp.frequency.exponentialRampToValueAtTime(600,ti+6);
+   const g=bus(.9,.7,0);lp.connect(g);
+   g.gain.setValueAtTime(0,t0);g.gain.linearRampToValueAtTime(.055,t0+1.6);g.gain.linearRampToValueAtTime(.075,ti-.35);g.gain.linearRampToValueAtTime(.012,ti-.03);
+   g.gain.setValueAtTime(.012,ti);g.gain.linearRampToValueAtTime(.08,ti+.9);g.gain.exponentialRampToValueAtTime(.0001,ti+6.5);
+   for(const m of [38,45,50,53,57,64]){for(const dt of [-8,7]){const o=ac.createOscillator();o.type="sawtooth";o.frequency.value=hz(m);o.detune.value=dt;o.connect(lp);o.start(t0);o.stop(ti+6.6)}}}
+  // B. glass chimes riding the particle stream (D minor pentatonic)
+  {const scale=[74,77,79,81,84,86,89,91,93,96];
+   for(let i=0;i<120;i++){const st=t0+.35+Math.pow(Math.random(),.9)*3.6;
+    const m=scale[Math.floor(Math.random()*scale.length)],f=hz(m);
+    const car=ac.createOscillator(),mod=ac.createOscillator(),mg=ac.createGain();car.type="sine";mod.type="sine";car.frequency.value=f;mod.frequency.value=f*3.5;
+    mg.gain.setValueAtTime(f*1.6,st);mg.gain.exponentialRampToValueAtTime(f*.05,st+.35);mod.connect(mg);mg.connect(car.frequency);
+    const pos=(st-t0)/4,pan=Math.max(-.9,Math.min(.9,Math.sin(pos*4.2)*.8+(Math.random()-.5)*.3));
+    const g=bus(1,1,pan);car.connect(g);
+    const v=.012+Math.random()*.022,dec=.35+Math.random()*.9;
+    g.gain.setValueAtTime(0,st);g.gain.linearRampToValueAtTime(v,st+.004);g.gain.exponentialRampToValueAtTime(.0001,st+dec);
+    car.start(st);mod.start(st);car.stop(st+dec+.05);mod.stop(st+dec+.05)}}
+  // C. airy whoosh of the stream, travelling across the stereo field
+  {const n=noise(),bp=ac.createBiquadFilter();bp.type="bandpass";bp.Q.value=.9;
+   bp.frequency.setValueAtTime(500,t0+.3);bp.frequency.exponentialRampToValueAtTime(2800,t0+2.3);bp.frequency.exponentialRampToValueAtTime(1100,t0+3.9);
+   const g=bus(1,.6,null);let p=null;if(ac.createStereoPanner){p=ac.createStereoPanner();p.pan.setValueAtTime(.5,t0+.3);p.pan.linearRampToValueAtTime(-.5,t0+1.8);p.pan.linearRampToValueAtTime(.55,t0+3.6);bp.connect(p);p.connect(g)}else bp.connect(g);
+   g.gain.setValueAtTime(0,t0+.3);g.gain.linearRampToValueAtTime(.09,t0+1.2);g.gain.linearRampToValueAtTime(.12,t0+2.6);g.gain.linearRampToValueAtTime(0,t0+4.1);
+   n.connect(bp);n.start(t0+.3);n.stop(t0+4.2)}
+  // D. riser: gliding tones + noise sweep, cut 40ms before the hit
+  {const lp=ac.createBiquadFilter();lp.type="lowpass";lp.Q.value=4;lp.frequency.setValueAtTime(300,t0+2.4);lp.frequency.exponentialRampToValueAtTime(5000,ti-.05);
+   const g=bus(1,.5,0);lp.connect(g);g.gain.setValueAtTime(.0001,t0+2.4);g.gain.exponentialRampToValueAtTime(.09,ti-.06);g.gain.linearRampToValueAtTime(0,ti-.04);
+   for(const [m,ty] of [[50,"sawtooth"],[62,"sawtooth"],[57,"triangle"]]){const o=ac.createOscillator();o.type=ty;o.frequency.setValueAtTime(hz(m),t0+2.4);o.frequency.exponentialRampToValueAtTime(hz(m+12),ti-.04);o.detune.value=(Math.random()-.5)*14;o.connect(lp);o.start(t0+2.4);o.stop(ti)}
+   const n=noise(),hp=ac.createBiquadFilter();hp.type="highpass";hp.frequency.setValueAtTime(900,t0+2.8);hp.frequency.exponentialRampToValueAtTime(9000,ti-.05);
+   const ng=bus(1,.4,0);hp.connect(ng);ng.gain.setValueAtTime(.0001,t0+2.8);ng.gain.exponentialRampToValueAtTime(.16,ti-.05);ng.gain.linearRampToValueAtTime(0,ti-.04);n.connect(hp);n.start(t0+2.8);n.stop(ti)}
+  // E. accelerating ticks
+  {let tt=t0+3.1,gap=.26;while(tt<ti-.08){const n=noise(),bp=ac.createBiquadFilter();bp.type="bandpass";bp.frequency.value=3200;bp.Q.value=6;
+     const g=bus(1,.3,(Math.random()-.5)*.4);bp.connect(g);g.gain.setValueAtTime(0,tt);g.gain.linearRampToValueAtTime(.22,tt+.002);g.gain.exponentialRampToValueAtTime(.0001,tt+.05);
+     n.connect(bp);n.start(tt);n.stop(tt+.06);tt+=gap;gap=Math.max(.045,gap*.8)}}
+  // F. THE HIT: distorted brass "braam" + sub drop + boom + shimmer
+  {const lp=ac.createBiquadFilter();lp.type="lowpass";lp.Q.value=2.2;lp.frequency.setValueAtTime(4200,ti);lp.frequency.exponentialRampToValueAtTime(260,ti+2.8);
+   const ws=ac.createWaveShaper();ws.curve=curve(2.6);ws.oversample="4x";
+   const g=bus(1,.75,0);ws.connect(lp);lp.connect(g);
+   g.gain.setValueAtTime(0,ti);g.gain.linearRampToValueAtTime(.34,ti+.025);g.gain.exponentialRampToValueAtTime(.12,ti+.8);g.gain.exponentialRampToValueAtTime(.0001,ti+4.6);
+   for(const m of [26,38,45,50]){for(const dt of [-14,0,13]){const o=ac.createOscillator();o.type="sawtooth";o.frequency.setValueAtTime(hz(m)*1.03,ti);o.frequency.exponentialRampToValueAtTime(hz(m),ti+.12);o.detune.value=dt;
+     const og=ac.createGain();og.gain.value=m<30?.5:.3;o.connect(og);og.connect(ws);o.start(ti);o.stop(ti+4.7)}}}
+  {const o=ac.createOscillator();o.type="sine";o.frequency.setValueAtTime(62,ti);o.frequency.exponentialRampToValueAtTime(27,ti+1.8);
+   const g=bus(1,.15,0);o.connect(g);g.gain.setValueAtTime(0,ti);g.gain.linearRampToValueAtTime(.95,ti+.01);g.gain.exponentialRampToValueAtTime(.0001,ti+3.6);o.start(ti);o.stop(ti+3.7)}
+  {const o=ac.createOscillator();o.type="sine";o.frequency.setValueAtTime(160,ti);o.frequency.exponentialRampToValueAtTime(42,ti+.14);
+   const g=bus(1,.3,0);o.connect(g);g.gain.setValueAtTime(0,ti);g.gain.linearRampToValueAtTime(1,ti+.003);g.gain.exponentialRampToValueAtTime(.0001,ti+.55);o.start(ti);o.stop(ti+.6)}
+  {const n=noise(),lp=ac.createBiquadFilter();lp.type="lowpass";lp.frequency.setValueAtTime(2200,ti);lp.frequency.exponentialRampToValueAtTime(120,ti+1.1);
+   const g=bus(1,1,0);n.connect(lp);lp.connect(g);g.gain.setValueAtTime(0,ti);g.gain.linearRampToValueAtTime(.5,ti+.004);g.gain.exponentialRampToValueAtTime(.0001,ti+1.4);n.start(ti);n.stop(ti+1.5)}
+  {const n=noise(),hp=ac.createBiquadFilter();hp.type="highpass";hp.frequency.value=6500;
+   const g=bus(.7,1.2,0);n.connect(hp);hp.connect(g);g.gain.setValueAtTime(0,ti);g.gain.linearRampToValueAtTime(.07,ti+.02);g.gain.exponentialRampToValueAtTime(.0001,ti+3);n.start(ti);n.stop(ti+3.1)}
+  // G. a single bright bell as the scene settles
+  {const st=ti+.9;for(const [m,v,p] of [[86,.05,-.25],[93,.03,.25],[98,.015,0]]){const f=hz(m),car=ac.createOscillator(),mod=ac.createOscillator(),mg=ac.createGain();
+    car.frequency.value=f;mod.frequency.value=f*2.01;mg.gain.setValueAtTime(f*1.2,st);mg.gain.exponentialRampToValueAtTime(f*.02,st+2.5);mod.connect(mg);mg.connect(car.frequency);
+    const g=bus(1,1.1,p);car.connect(g);g.gain.setValueAtTime(0,st);g.gain.linearRampToValueAtTime(v,st+.006);g.gain.exponentialRampToValueAtTime(.0001,st+4.5);
+    car.start(st);mod.start(st);car.stop(st+4.6);mod.stop(st+4.6)}}
+  return t0-ac.currentTime;
 }
 function triggerImpact(){
   impacted=true;flash=1;shake=1;
   const R=FW*.17;
-  for(let k=0;k<5;k++)shocks.push({r:R*.25,a:.95-k*.12,v:FW*(1.25+k*.32),w:3.2-k*.45,d:k*.07});
+  shocks.push({t:0,d:0,main:1},{t:0,d:.14,main:0},{t:0,d:.3,main:0});
   if(!reduced)for(let i=0;i<(MOBILE?220:420);i++){
     const side=Math.random()<.5?-1:1,y=FH*(.3+Math.random()*.6);
     parts.push({x:FW*(.5+side*(.12+Math.random()*.2)),y,vx:side*(2+Math.random()*9),vy:(Math.random()-.5)*2.4,life:1,decay:.007+Math.random()*.016,r:.5+Math.random()*1.7,warm:Math.random()<.3,drag:.965});
@@ -739,6 +757,7 @@ async function start(){
   if(synth){const w=new SpeechSynthesisUtterance(" ");w.volume=0;synth.speak(w)}
   const ms=startIntro();
   if(ms)await new Promise(r=>setTimeout(r,ms));
+  if(window.__vclock!=null)return;
   if(!IOS)await initMic();
   const id=turnId;streamDone=true;
   const g=activeKey()?`أهلاً بك، أنا ${cfg.name}. أنا أسمعك الآن، تفضّل بالحديث.`
@@ -887,37 +906,40 @@ void main(){
   gl_FragColor=vec4(c.rgb,max(c.r,max(c.g,c.b)));
 }`;
 const VS_P=`
-attribute vec2 a;attribute vec4 c;attribute float o;uniform float T,cell,asp,F,D;uniform vec4 G;varying vec4 vc;
+attribute vec2 a;attribute vec4 c;attribute float o;uniform float T,cell,asp,F,D,K;uniform vec4 G;varying vec4 vc;
 float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 vec2 bz(vec2 p0,vec2 p1,vec2 p2,vec2 p3,float u){float v=1.-u;return v*v*v*p0+3.*v*v*u*p1+3.*v*u*u*p2+u*u*u*p3;}
 void main(){
   vec2 A=vec2(asp,1.);
-  vec2 S=vec2(.5,.935)*A,P3=a*A,C=vec2(.5,.5)*A;
-  float rn=h(a),rn2=h(a+3.7),rn3=h(a+9.1);
-  float late=max(o-1.,0.);
-  float te=.35+o*2.05+rn*.18;
-  float dur=.95+rn2*.35+late*1.4;
+  vec2 S=vec2(.5,.935)*A,P3=a*A;
+  float rn=h(a),rn2=h(a+3.7),rn3=h(a+9.1),rf=h(a+5.3);
+  float late=max(o-1.,0.),oo=min(o,1.);
+  float te=.3+oo*2.55+rn*.16+late*.85;
+  float dur=1.05+rn2*.32+late*.9;
   float k=clamp((T-te)/dur,0.,1.);
-  float u=k<.5?4.*k*k*k:1.-pow(-2.*k+2.,3.)/2.;
-  float th=radians(205.+min(o,1.)*130.);
-  vec2 dir=vec2(cos(th),sin(th));
-  vec2 jit=(vec2(rn2,rn3)-.5)*.07;
-  vec2 P1=S+dir*(.62+rn*.12)+jit;
-  vec2 ou=normalize(P3-C+vec2(1e-4));
-  vec2 sw=vec2(-ou.y,ou.x);
-  vec2 P2=P3+ou*(.26+rn3*.12)+sw*(.34+late*.5)+jit*1.5;
+  float u=1.-pow(1.-k,2.1);
+  vec2 jit=(vec2(rn2,rn3)-.5)*.10;
+  vec2 P1=S+vec2(.42,-.44)+jit*1.3;
+  float ph=radians(mix(-125.,-12.,oo));
+  vec2 P2=P3+vec2(cos(ph),sin(ph))*(.40+rn*.14)+jit*1.7+vec2(late*.32,-late*.04);
   vec2 pp=bz(S,P1,P2,P3,u)/A;
   vec2 cp=vec2(pp.x*G.x+G.y,-(pp.y*G.z+G.w));
   gl_Position=vec4(cp,0.,1.);
-  float vis=step(.00001,T-te);
-  float fly=1.-smoothstep(.72,1.,k);
+  float on=step(.00001,T-te);
+  float flyer=step(rf,K);
+  float fly=1.-smoothstep(.84,1.,k);
   vec2 ee=(a-vec2(.5,.46))/vec2(.62,.70);
   float em=1.-smoothstep(.62,1.,length(ee));
   vec3 tc=c.rgb*em;
-  vec3 fcol=mix(vec3(.3,.72,1.),tc*1.6+vec3(.03,.08,.14),smoothstep(.15,.95,u)*.85);
-  float ef=smoothstep(1.,.85,max(abs(cp.x),abs(cp.y)));
-  gl_PointSize=mix(cell*1.1,cell*2.3,fly);
-  vc=vec4(mix(tc,fcol,fly),vis*mix(1./D,.32/D,fly)*F*ef);
+  float warm=smoothstep(.05,.25,c.r-c.b);
+  vec3 dotc=mix(vec3(.55,.85,1.),vec3(1.,.62,.28),warm)*1.15;
+  float land=exp(-pow((k-.93)/.05,2.))*(1.-flyer);
+  vec3 col=mix(tc*(1.+land*2.5),dotc,fly*flyer);
+  float ef=smoothstep(1.,.86,max(abs(cp.x),abs(cp.y)));
+  float big=max(cell*2.3,2.4);
+  gl_PointSize=mix(cell*1.1,big,fly*flyer);
+  float alpha=flyer>.5?mix(1./D,.95,fly):smoothstep(.78,1.,k)/D;
+  vc=vec4(col,on*alpha*F*ef);
 }`;
 const FS_P=`precision mediump float;varying vec4 vc;void main(){vec2 q=gl_PointCoord-.5;float f=1.-smoothstep(.2,.5,length(q));float a=vc.a*f;vec3 c=vc.rgb*a;gl_FragColor=vec4(c,max(c.r,max(c.g,c.b)));}`;
 function mkProg(vs,fs){
@@ -930,21 +952,24 @@ function buildParticles(){
   const cv=document.createElement("canvas");cv.width=iw;cv.height=ih;const c2=cv.getContext("2d");c2.drawImage(faceImg,0,0);
   const d=c2.getImageData(0,0,iw,ih).data;
   const per=MOBILE?1:2,th=MOBILE?20:13;
-  let n=0;for(let i=0;i<d.length;i+=4){if(Math.max(d[i],d[i+1],d[i+2])>th)n++}
+  let n=0;for(let i=0;i<d.length;i+=4){if(Math.max(d[i],d[i+1],d[i+2])>th)n++}if(window.__lite)n=Math.ceil(n/3.5);
   n*=per;
-  const pos=new Float32Array(n*2),col=new Uint8Array(n*4),ord=new Float32Array(n);let k=0;
+  const pos=new Float32Array(n*2),col=new Uint8Array(n*4),ord=new Float32Array(n);let k=0;const LIM=n;
   const asp=iw/ih,cx0=.5*asp,cy0=.52;
-  for(let y=0;y<ih;y++)for(let x=0;x<iw;x++){
-    const i=(y*iw+x)*4;if(Math.max(d[i],d[i+1],d[i+2])<=th)continue;
+  const st=window.__lite?2:1;
+  for(let y=0;y<ih;y+=st)for(let x=0;x<iw;x+=st){
+    const i=(y*iw+x)*4;if(Math.max(d[i],d[i+1],d[i+2])<=th||k>=LIM)continue;
     for(let j=0;j<per;j++){
       pos[k*2]=(x+(per>1?Math.random():.5))/iw;pos[k*2+1]=(y+(per>1?Math.random():.5))/ih;
       col[k*4]=d[i];col[k*4+1]=d[i+1];col[k*4+2]=d[i+2];col[k*4+3]=255;
       const ang=Math.atan2(pos[k*2+1]-cy0,pos[k*2]*asp-cx0)*57.2958;
       const px=pos[k*2],py=pos[k*2+1],rr=Math.hypot(px*asp-cx0,py-cy0);
       const ao=((ang-90+720)%360)/360,sd=Math.min(ao,1-ao)*360,sw=sd>=55?1:(sd/55)*(sd/55)*(3-2*sd/55);
-      let o=(ao*sw+.5*(1-sw))*.8+rr*.22+(Math.sin(px*23+py*17)*.5+.5)*.05+Math.random()*.04;
+      const lum=Math.max(d[i],d[i+1],d[i+2])/255,warmP=d[i]>d[i+2]+25;
+      let o=(ao*sw+.5*(1-sw))*.86+(Math.sin(px*23+py*17)*.5+.5)*.05+Math.random()*.05;
+      if(warmP)o=.32+Math.random()*.38;
       if(o>.999)o=.999;
-      if(Math.random()<.035)o+=1+Math.random()*.25;
+      if(Math.random()<.03&&px>.5)o+=1+Math.random()*.3;
       ord[k]=o;k++;
     }
   }
@@ -960,7 +985,7 @@ function initGL(){
     if(!gl)throw new Error("no webgl");
     qProg=mkProg(VS_Q,FS_Q);pProg=mkProg(VS_P,FS_P);
     for(const u of ["tx","T","M","E","F","G"])QU[u]=gl.getUniformLocation(qProg,u);
-    for(const u of ["T","cell","asp","F","G","D"])PU[u]=gl.getUniformLocation(pProg,u);
+    for(const u of ["T","cell","asp","F","G","D","K"])PU[u]=gl.getUniformLocation(pProg,u);
     qBuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,qBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
     tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
@@ -977,7 +1002,7 @@ function initGL(){
 function attr(prog,name,buf,size,type,norm){const l=gl.getAttribLocation(prog,name);gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.enableVertexAttribArray(l);gl.vertexAttribPointer(l,size,type,norm,0,0);return l}
 function drawGL(t,it,mouth){
   gl.viewport(0,0,glc.width,glc.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
-  const qf=introDone?1:Math.min(1,Math.max(0,(it-3.95)/.6));
+  const qf=introDone?1:Math.min(1,Math.max(0,(it-4.05)/.5));
   const G=[2/2,0.5*2/2-1,2/1.3,.15*2/1.3-1];
   if(qf>0){
     gl.disable(gl.BLEND);gl.useProgram(qProg);
@@ -989,7 +1014,7 @@ function drawGL(t,it,mouth){
   if(!introDone&&NP){
     gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.useProgram(pProg);
     const l1=attr(pProg,"a",pBuf,2,gl.FLOAT,false),l2=attr(pProg,"c",cBuf,4,gl.UNSIGNED_BYTE,true),l3=attr(pProg,"o",oBuf,1,gl.FLOAT,false);
-    gl.uniform1f(PU.T,it);gl.uniform1f(PU.cell,glc.height/1.3/faceImg.naturalHeight*(MOBILE?1.25:1));gl.uniform1f(PU.asp,FW/FH);gl.uniform1f(PU.F,1-qf);gl.uniform1f(PU.D,MOBILE?1:2);gl.uniform4fv(PU.G,G);
+    gl.uniform1f(PU.T,it);gl.uniform1f(PU.cell,glc.height/1.3/faceImg.naturalHeight*(MOBILE?1.25:1)*(window.__lite?2:1));gl.uniform1f(PU.asp,FW/FH);gl.uniform1f(PU.F,1-qf);gl.uniform1f(PU.D,MOBILE?1:2);gl.uniform1f(PU.K,MOBILE?.05:.028);gl.uniform4fv(PU.G,G);
     gl.drawArrays(gl.POINTS,0,NP);gl.disableVertexAttribArray(l1);gl.disableVertexAttribArray(l2);gl.disableVertexAttribArray(l3);
   }
   if(!introDone&&qf>=1&&window.__introAt==null){introDone=true;gl.deleteBuffer(pBuf);gl.deleteBuffer(cBuf);gl.deleteBuffer(oBuf);NP=0}
@@ -997,7 +1022,8 @@ function drawGL(t,it,mouth){
 
 let parts=[],rings=[],shoots=[],motes=[],shocks=[],flash=0,shake=0,impacted=false,mtn=null,mtnSpark=[];
 const IMPACT=4.6,INTRO_END=5.6;
-function introRunning(){return introT0>=0&&performance.now()/1000-introT0<INTRO_END}
+const clk=()=>window.__vclock!=null?window.__vclock:performance.now()/1000;
+function introRunning(){return introT0>=0&&clk()-introT0<INTRO_END}
 function burst(n){
   if(reduced)n=Math.ceil(n/3);
   for(let i=0;i<n;i++){const a=-Math.PI/2+(Math.random()-.5)*2.6,s=.6+Math.random()*2.2;
@@ -1009,7 +1035,7 @@ addEventListener("pointermove",e=>{tmx=(e.clientX/innerWidth-.5)*2;tmy=(e.client
 function buildMountains(){
   const sc=Math.min(DPR,1.5);mtn=document.createElement("canvas");mtn.width=Math.round(W*sc);mtn.height=Math.round(H*sc);
   const g=mtn.getContext("2d");g.scale(sc,sc);mtnSpark=[];
-  const portrait=H>W*1.2,base=H*(portrait?.80:.66);
+  const portrait=H>W*1.2,base=H*(portrait?.76:.66);
   const seeds=[Math.random()*1000,Math.random()*1000];
   const hsh=n=>{const x=Math.sin(n*127.1+311.7)*43758.5453;return x-Math.floor(x)};
   const vn=(x,sd)=>{const i=Math.floor(x),f=x-i,u=f*f*(3-2*f);return hsh(i+sd)*(1-u)+hsh(i+1+sd)*u};
@@ -1017,7 +1043,7 @@ function buildMountains(){
     let n=0,amp=.55,fr=4;for(let o=0;o<5;o++){const r=1-Math.abs(vn(u*fr,sd+o*17)*2-1);n+=r*r*amp;amp*=.5;fr*=2.1}
     return base-(layer?H*.06:0)-n*H*(portrait?.24:.36)*(.3+.85*side)*(layer?.75:1)};
   for(const layer of [1,0]){
-    const A=layer?.28:.55,step=MOBILE?2:1.4;
+    const A=(layer?.28:.55)*(portrait?1.45:1),step=MOBILE?2:1.4;
     for(let x=0;x<W;x+=step){
       const ry=ridge(x,layer);
       g.fillStyle=`rgba(190,235,255,${A*1.4})`;g.fillRect(x,ry,1.3,1.3);
@@ -1043,10 +1069,10 @@ function buildMountains(){
 function drawBackdrop(t,dt){
   const IT=introT0<0?(introDone?99:0):t-introT0;
   // particle mountains revealed from the center outwards after the impact
-  const mk=introDone&&introT0<0?1:Math.min(1,Math.max(0,(IT-IMPACT-.05)/1.3));
+  const mk=introDone&&introT0<0?1:Math.min(1,Math.max(0,(IT-IMPACT+.15)/1.1));
   if(mtn&&mk>0){
-    const w=W*(.15+.85*(1-Math.pow(1-mk,3)));
-    sx.save();sx.beginPath();sx.rect(coreX-w,0,w*2,H);sx.clip();sx.globalAlpha=.85*Math.min(1,mk*1.6);
+    const w=W*.5*(1-Math.pow(1-mk,3));
+    sx.save();sx.beginPath();sx.rect(0,0,w,H);sx.rect(W-w,0,w,H);sx.clip();sx.globalAlpha=.85*Math.min(1,mk*1.6);
     sx.drawImage(mtn,-mx*12,-my*6,W,H);
     for(const p of mtnSpark){const a=.5+.5*Math.sin(t*p.s+p.p);sx.fillStyle=`rgba(200,240,255,${a*.8})`;sx.fillRect(p.x-mx*12-1,p.y-my*6-1,2.2,2.2)}
     sx.restore();
@@ -1092,7 +1118,8 @@ function drawBackdrop(t,dt){
 let E=0,last=performance.now(),ringT=0,mouth=0;
 const nz=t=>(Math.sin(t*1.7)+Math.sin(t*3.1+1.3)*.6+Math.sin(t*7.3+.4)*.35)/1.95;
 function frame(now){
-  const dt=Math.min(.05,(now-last)/1000);last=now;const t=now/1000;
+  if(window.__vclock!=null)now=window.__vclock*1000;
+  const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;const t=now/1000;
   micKick*=Math.pow(.15,dt);
   micLevel+= (Math.max(readMic(),micKick)-micLevel)*.3;
   pulse*=Math.pow(.02,dt);
@@ -1137,10 +1164,13 @@ function frame(now){
   drawBackdrop(t,dt);
   if(vig&&vig.width>0)sx.drawImage(vig,0,0,W,H);
   for(let i=shocks.length-1;i>=0;i--){const s=shocks[i];if(s.d>0){s.d-=dt;continue}
-    s.r+=s.v*dt;s.v*=Math.pow(.35,dt);s.a-=dt*.7;if(s.a<=0){shocks.splice(i,1);continue}
-    const ox=coreX,oy=coreY;sx.save();sx.globalCompositeOperation="lighter";
-    sx.strokeStyle=`rgba(130,215,255,${s.a})`;sx.lineWidth=s.w;sx.beginPath();sx.arc(ox,oy,s.r,0,6.283);sx.stroke();
-    sx.strokeStyle=`rgba(255,200,140,${s.a*.3})`;sx.lineWidth=s.w*3.5;sx.beginPath();sx.arc(ox,oy,s.r*.985,0,6.283);sx.stroke();sx.restore()}
+    s.t+=dt;const L=s.main?1.25:1.0,p=Math.min(1,s.t/L);if(p>=1){shocks.splice(i,1);continue}
+    const e=1-Math.pow(1-p,3),Rm=Math.hypot(W,H)*(s.main?.62:.5),r=figW*.22+e*Rm,a=(1-p)*(s.main?1:.55);
+    sx.save();sx.globalCompositeOperation="lighter";
+    const g=sx.createRadialGradient(coreX,coreY,r*.72,coreX,coreY,r);
+    g.addColorStop(0,"rgba(40,120,255,0)");g.addColorStop(.55,`rgba(50,140,255,${a*.10})`);g.addColorStop(.88,`rgba(80,170,255,${a*.45})`);
+    g.addColorStop(.965,`rgba(170,225,255,${a*.95})`);g.addColorStop(1,"rgba(170,225,255,0)");
+    sx.fillStyle=g;sx.beginPath();sx.arc(coreX,coreY,r,0,6.2832);sx.fill();sx.restore()}
   if(flash>0){sx.fillStyle=`rgba(150,210,255,${flash*.18})`;sx.fillRect(0,0,W,H)}
   flash*=Math.pow(.02,dt);shake*=Math.pow(.004,dt);
   const shx=(Math.random()-.5)*shake*14,shy=(Math.random()-.5)*shake*10;
@@ -1161,10 +1191,10 @@ function frame(now){
   fx.fillStyle=g;fx.beginPath();fx.arc(cx,cy,gr,0,6.283);fx.fill();
   // chest spark that emits the particles
   const spA=introT0<0?(introDone?0:.45+.2*Math.sin(t*2.4)):(it<IMPACT?.95+.05*Math.sin(t*40):Math.max(0,1-(it-IMPACT)*2));
-  if(spA>0){const sx0=.5*FW,sy0=.935*FH,sr=FW*(.05+.03*Math.sin(t*9))*(introT0<0?.8:1.25);
+  if(spA>0){const sx0=.5*FW,sy0=.935*FH,sr=FW*(.022+.01*Math.sin(t*9))*(introT0<0?.9:1.2);
     let sg=fx.createRadialGradient(sx0,sy0,0,sx0,sy0,sr*3);sg.addColorStop(0,`rgba(235,250,255,${spA})`);sg.addColorStop(.12,`rgba(120,210,255,${spA*.9})`);sg.addColorStop(1,"rgba(40,140,255,0)");
     fx.fillStyle=sg;fx.beginPath();fx.arc(sx0,sy0,sr*3,0,6.283);fx.fill();
-    fx.strokeStyle=`rgba(180,230,255,${spA*.6})`;fx.lineWidth=1;fx.beginPath();fx.moveTo(sx0-sr*4,sy0);fx.lineTo(sx0+sr*4,sy0);fx.stroke()}
+    }
   if(state==="listening"){
     g=fx.createRadialGradient(cx,cy,0,cx,cy,R*1.3);g.addColorStop(0,`rgba(120,220,255,${.10+micLevel*.4})`);g.addColorStop(1,"rgba(120,220,255,0)");
     fx.fillStyle=g;fx.beginPath();fx.arc(cx,cy,R*1.3,0,6.283);fx.fill();
@@ -1201,7 +1231,12 @@ function frame(now){
 
   requestAnimationFrame(frame);
 }
-window.__siraj={say:t=>handleUser(t),state:s=>setState(s),soundTest:async()=>{const oc=new OfflineAudioContext(2,44100*10,44100);const prev=outCtx;outCtx=oc;introSound();outCtx=prev;const b=await oc.startRendering();const d=b.getChannelData(0),r=[];let pk=0;for(let i=0;i<d.length;i+=22050){let q=0;for(let j=i;j<i+22050&&j<d.length;j++){q+=d[j]*d[j];pk=Math.max(pk,Math.abs(d[j]))}r.push(+Math.sqrt(q/22050).toFixed(3))}return {r,pk}}};
+window.__siraj={say:t=>handleUser(t),state:s=>setState(s),renderWav:async()=>{const SRr=44100,oc=new OfflineAudioContext(2,SRr*11,SRr);const prev=outCtx;outCtx=oc;introSound();outCtx=prev;const b=await oc.startRendering();
+    const L=b.length,l=b.getChannelData(0),r=b.getChannelData(1),buf=new ArrayBuffer(44+L*4),v=new DataView(buf);
+    const ws=(o,t)=>{for(let i=0;i<t.length;i++)v.setUint8(o+i,t.charCodeAt(i))};ws(0,"RIFF");v.setUint32(4,36+L*4,true);ws(8,"WAVE");ws(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,2,true);v.setUint32(24,SRr,true);v.setUint32(28,SRr*4,true);v.setUint16(32,4,true);v.setUint16(34,16,true);ws(36,"data");v.setUint32(40,L*4,true);
+    for(let i=0;i<L;i++){v.setInt16(44+i*4,Math.max(-1,Math.min(1,l[i]))*32767,true);v.setInt16(46+i*4,Math.max(-1,Math.min(1,r[i]))*32767,true)}
+    let bin="";const u=new Uint8Array(buf);for(let i=0;i<u.length;i+=32768)bin+=String.fromCharCode.apply(null,u.subarray(i,i+32768));return btoa(bin)},
+  soundTest:async()=>{const oc=new OfflineAudioContext(2,44100*11,44100);const prev=outCtx;outCtx=oc;introSound();outCtx=prev;const b=await oc.startRendering();const d=b.getChannelData(0),r=[];let pk=0;for(let i=0;i<d.length;i+=22050){let q=0;for(let j=i;j<i+22050&&j<d.length;j++){q+=d[j]*d[j];pk=Math.max(pk,Math.abs(d[j]))}r.push(+Math.sqrt(q/22050).toFixed(3))}return {r,pk}}};
 function boot(){resize();initGL();setState("sleep");requestAnimationFrame(frame);new ResizeObserver(sizeFx).observe(stage)}
 if(faceImg.complete&&faceImg.naturalWidth)boot();else faceImg.addEventListener("load",boot,{once:true});
 })();
